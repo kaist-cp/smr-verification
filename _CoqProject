@@ -1,0 +1,207 @@
+-Q theories smr
+# We sometimes want to locally override notation, and there is no good way to do that with scopes.
+-arg -w -arg -notation-overridden
+# Cannot use non-canonical projections as it causes massive unification failures
+# (https://github.com/coq/coq/issues/6294).
+-arg -w -arg -redundant-canonical-projection
+# Disabling warnings about future coercion syntax that requires Coq 8.17
+# (https://github.com/coq/coq/pull/16230)
+-arg -w -arg -future-coercion-class-field
+
+
+# Modified version of heap_lang, with block memory model, tagging, and integers extended with infinity
+theories/lang/locations.v
+theories/lang/inf_Z.v
+theories/lang/lang.v
+theories/lang/class_instances.v
+theories/lang/tactics.v
+theories/lang/primitive_laws.v
+theories/lang/derived_laws.v
+theories/lang/notation.v
+theories/lang/proofmode.v
+theories/lang/adequacy.v
+theories/lang/total_adequacy.v
+theories/lang/proph_erasure.v
+
+# Logic
+theories/base_logic/lib/mono_list.v # from iris-staging
+theories/base_logic/lib/ghost_var.v # with persistent ownership
+theories/base_logic/lib/mono_nat.v # with persistent ownership
+theories/program_logic/atomic.v # atomic_wp with inner mask
+
+theories/helpers.v
+theories/sorted_list.v
+
+theories/algebra/gset.v
+theories/algebra/coPset.v
+theories/algebra/coP_gmap_view.v
+theories/algebra/coP_auth.v
+
+theories/base_logic/lib/coP_cancellable_invariants.v
+theories/base_logic/lib/coP_ghost_map.v
+theories/base_logic/lib/ghost_vars.v
+theories/base_logic/lib/mono_nats.v
+
+theories/logic/token2.v
+theories/logic/reclamation.v
+theories/logic/epoch_history.v
+theories/logic/node_link_history.v
+
+# General
+theories/code_slot_bag_oloc.v
+theories/code_slot_bag_onat.v
+theories/spec_slot_bag_onat.v
+theories/spec_slot_bag_oloc.v
+theories/proof_slot_bag_onat.v
+theories/proof_slot_bag_oloc.v
+theories/code_retired_list.v
+theories/spec_retired_list.v
+theories/proof_retired_list.v
+
+theories/type.v
+theories/smr_common.v
+
+# No Reclamation Baseline
+## Code
+theories/no_recl/code_counter.v
+theories/no_recl/code_treiber.v
+theories/no_recl/code_ms.v
+theories/no_recl/code_dglm.v
+theories/no_recl/code_elimstack.v
+theories/no_recl/code_rdcss.v
+theories/no_recl/code_cldeque.v
+theories/no_recl/code_harris_operations.v
+theories/no_recl/code_harris_find.v
+theories/no_recl/code_harris_michael_find.v
+
+## Specs
+theories/no_recl/spec_counter.v
+theories/no_recl/spec_stack.v
+theories/no_recl/spec_queue.v
+theories/no_recl/spec_rdcss.v
+theories/no_recl/spec_cldeque.v
+theories/no_recl/spec_ordered_set.v
+
+## Proofs
+theories/no_recl/proof_counter.v
+theories/no_recl/proof_treiber.v
+theories/no_recl/proof_ms.v
+theories/no_recl/proof_dglm.v
+theories/no_recl/proof_elimstack.v
+theories/no_recl/proof_rdcss.v
+theories/no_recl/proof_cldeque.v
+theories/no_recl/proof_harris_operations.v
+theories/no_recl/proof_harris_find.v
+theories/no_recl/proof_harris_michael_find.v
+
+theories/no_recl/closed_proofs.v
+theories/no_recl/client.v
+
+# Harzard Pointers
+## Code
+theories/hazptr/code_hazptr.v
+theories/hazptr/code_counter.v
+theories/hazptr/code_hybrid_counter.v
+theories/hazptr/code_treiber.v
+theories/hazptr/code_ms.v
+theories/hazptr/code_dglm.v
+theories/hazptr/code_elimstack.v
+theories/hazptr/code_rdcss.v
+theories/hazptr/code_cldeque.v
+theories/hazptr/code_harris_operations.v
+theories/hazptr/code_harris_michael_find.v
+
+## Specs
+theories/hazptr/spec_hazptr.v
+theories/hazptr/spec_counter.v
+theories/hazptr/spec_hybrid_counter.v
+theories/hazptr/spec_stack.v
+theories/hazptr/spec_queue.v
+theories/hazptr/spec_rdcss.v
+theories/hazptr/spec_cldeque.v
+theories/hazptr/spec_ordered_set.v
+
+## Proofs
+theories/hazptr/proof_hazptr.v
+theories/hazptr/proof_counter.v
+theories/hazptr/proof_hybrid_counter.v
+theories/hazptr/proof_treiber.v
+theories/hazptr/proof_ms.v
+theories/hazptr/proof_dglm.v
+theories/hazptr/proof_elimstack.v
+theories/hazptr/proof_rdcss.v
+theories/hazptr/proof_cldeque.v
+theories/hazptr/proof_harris_operations.v
+theories/hazptr/proof_harris_michael_find.v
+
+theories/hazptr/closed_proofs.v
+theories/hazptr/client.v
+
+# Epoch Based Read Copy Update
+## Code
+theories/ebr/code_ebr.v
+theories/ebr/code_counter.v
+theories/ebr/code_hybrid_counter.v
+theories/ebr/code_treiber.v
+theories/ebr/code_ms.v
+theories/ebr/code_dglm.v
+theories/ebr/code_elimstack.v
+theories/ebr/code_rdcss.v
+theories/ebr/code_cldeque.v
+theories/ebr/code_harris_operations.v
+theories/ebr/code_harris_find.v
+theories/ebr/code_harris_michael_find.v
+
+## Specs
+theories/ebr/spec_rcu_common.v
+theories/ebr/spec_rcu_base.v
+theories/ebr/spec_rcu_simple.v
+theories/ebr/spec_rcu_traversal.v
+theories/ebr/spec_counter.v
+theories/ebr/spec_hybrid_counter.v
+theories/ebr/spec_stack.v
+theories/ebr/spec_queue.v
+theories/ebr/spec_rdcss.v
+theories/ebr/spec_cldeque.v
+theories/ebr/spec_ordered_set.v
+
+## Proofs
+theories/ebr/proof_ebr_rcu_base.v
+theories/ebr/proof_rcu_simple.v
+theories/ebr/proof_rcu_traversal.v
+theories/ebr/proof_counter.v
+theories/ebr/proof_hybrid_counter.v
+theories/ebr/proof_treiber.v
+theories/ebr/proof_ms.v
+theories/ebr/proof_dglm.v
+theories/ebr/proof_elimstack.v
+theories/ebr/proof_rdcss.v
+theories/ebr/proof_cldeque.v
+theories/ebr/proof_harris_operations.v
+theories/ebr/proof_harris_find.v
+theories/ebr/proof_harris_michael_find.v
+
+theories/ebr/closed_proofs.v
+theories/ebr/client.v
+
+
+## Diaframe Basis
+theories/diaframe/lang/specs.v
+theories/diaframe/lang/proof_automation.v
+theories/diaframe/lang/base_hints.v
+theories/diaframe/lang/wp_auto_lob.v
+theories/diaframe/lang/atomic_specs.v
+theories/diaframe/lang/smr_weakestpre.v
+theories/diaframe/lang/smr_weakestpre_logatom.v
+theories/diaframe/lang/atom_spec_notation.v
+
+## Diaframe Hints
+theories/diaframe/hints/ghost_var_hints.v
+theories/diaframe/hints/array_hints.v
+theories/diaframe/hints/hazptr_hints.v
+theories/diaframe/hints/rcu_hints.v
+
+## Example: treiber stack on HP and RCU
+theories/diaframe/examples/proof_treiber_no_recl.v
+theories/diaframe/examples/proof_treiber_hazptr.v
+theories/diaframe/examples/proof_treiber_rcu.v

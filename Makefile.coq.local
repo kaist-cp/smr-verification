@@ -1,0 +1,14 @@
+# Based on https://gitlab.mpi-sws.org/iris/examples/-/blob/ffb30f920932924f37bf19f00d91dfd5e94d4c52/Makefile.coq.local
+include Makefile.coq.conf
+
+# Run tests interleaved with main build.  They have to be in the same target for this.
+real-all: style
+
+style: $(VFILES) coq-lint.sh
+# Make sure everything imports the options, and all Instance/Argument/Hint are qualified.
+	$(SHOW)"COQLINT"
+	$(HIDE)for FILE in $(VFILES); do \
+	  if ! fgrep -q 'From iris.prelude Require Import options.' "$$FILE"; then echo "ERROR: $$FILE does not import 'options'."; echo; exit 1; fi ; \
+	  ./coq-lint.sh "$$FILE" || exit 1; \
+	done
+.PHONY: style

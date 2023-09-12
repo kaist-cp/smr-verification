@@ -1,0 +1,23 @@
+opam-version: "2.0"
+name: "smr-verification"
+synopsis: "Verification of safe memory reclamation (SMR) algorithms"
+description: """
+The Coq implementation of hazard pointer and epoch-based reclamation
+algorithm, with their specifications and proof.
+"""
+license: "BSD"
+
+maintainer: ["Jaehwang Jung <jaehwang.jung@kaist.ac.kr>"]
+authors: ["Jaehwang Jung" "Janggun Lee" "Jaemin Choi" "Jaewoo Kim" "Sunho Park" "Jeehoon Kang"]
+
+homepage: "https://cp-git.kaist.ac.kr/verification/smr"
+bug-reports: "https://cp-git.kaist.ac.kr/verification/smr/issues"
+dev-repo: "git+https://cp-git.kaist.ac.kr/verification/smr.git"
+
+depends: [
+  "coq-iris"  { = "dev.2023-06-14.0.f0e415b6" }
+  "coq-diaframe" { = "dev.2023-06-15.0.1c3b5549" }
+]
+
+build: [make "-j%{jobs}%" ]
+install: [make "install"]

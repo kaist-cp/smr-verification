@@ -1,0 +1,27 @@
+.ignore
+.git*
+.coqdeps.d
+.gitignore
+.gitlab-ci.yml
+.gitmodules
+.ignore
+.lia.cache
+.Makefile.coq.d
+_CoqProject
+LICENSE
+Makefile
+Makefile.coq
+Makefile.coq.conf
+notes.md
+opam
+!_opam
+tags
+TAGS
+
+## put this in _opam/.ignore ##########
+# *
+# !*/
+# # !lib/coq/theories/**/*.v
+# !lib/coq/user-contrib/**/*.v
+# lib/coq/user-contrib/Ltac2
+#######################################
