@@ -5,7 +5,7 @@ description: """
 The Coq implementation of hazard pointer and epoch-based reclamation
 algorithm, with their specifications and proof.
 """
-license: "BSD"
+license: "BSD-3-Clause"
 
 maintainer: ["Jaehwang Jung <jaehwang.jung@kaist.ac.kr>"]
 authors: ["Jaehwang Jung" "Janggun Lee" "Jaemin Choi" "Jaewoo Kim" "Sunho Park" "Jeehoon Kang"]
