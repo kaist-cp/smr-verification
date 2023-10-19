@@ -1,6 +1,10 @@
 # Modular Verification of Safe Memory Reclamation in Concurrent Separation Logic
 
-This repository contains the proofs of the paper "Modular Verification of Safe Memory Reclamation in Concurrent Separation Logic" (OOPSLA'23) mechanized in Coq with the Iris separation logic framework.
+This repository contains the proofs of the following paper, mechanized in Coq with the Iris separation logic framework.
+
+> Jaehwang Jung, Janggun Lee, Jaemin Choi, Jaewoo Kim, Sunho Park, and Jeehoon Kang. 2023. Modular Verification of Safe Memory Reclamation in Concurrent Separation Logic. Proc. ACM Program. Lang. 7, OOPSLA2, Article 251 (October 2023), 29 pages. https://doi.org/10.1145/3622827
+
+(full paper with appendix: <https://drive.google.com/file/d/1hBjJ6nhFYiTJ1KI5u7i8MvLPznysBGSD/view?usp=sharing>)
 
 ## Build
 This version is known to compile with
@@ -232,7 +236,7 @@ In `algebra` and [`base_logic`](theories/base_logic/lib), we use several variant
 * [`coP_ghost_map.v`](theories/base_logic/lib/coP_ghost_map.v): Ghost maps, but using non-empty coPsets for fractional tokens instead of positive rational numbers.
 * [`ghost_vars.v`](theories/base_logic/lib/ghost_vars.v): The ghost state mapping each positive integer, and each pair of positive integers, to a ghost variable.
 * [`mono_list.v`](theories/base_logic/lib/mono_list.v): The ghost state of monotonically growing lists, [taken from the nightly version of Iris](https://gitlab.mpi-sws.org/iris/iris/-/blob/master/iris_staging/base_logic/mono_list.v).
-* [`mono_nats.v`](theories/base_logic/lib/mono_nats.v): The ghost state of monotonically growing natural numbers, [taken from Iris](https://gitlab.mpi-sws.org/iris/iris/-/blob/master/iris/base_logic/lib/mono_nat.v), modified to support fixing the number to a persistent value.
+* [`mono_nat.v`](theories/base_logic/lib/mono_nat.v): The ghost state of monotonically growing natural numbers, [taken from Iris](https://gitlab.mpi-sws.org/iris/iris/-/blob/master/iris/base_logic/lib/mono_nat.v), modified to support fixing the number to a persistent value.
 * [`mono_nats.v`](theories/base_logic/lib/mono_nats.v): The ghost state mapping each positive integer to [`mono_nat`](https://gitlab.mpi-sws.org/iris/iris/-/blob/master/iris/base_logic/lib/mono_nat.v), monotonically increasing natural numbers.
 
 
