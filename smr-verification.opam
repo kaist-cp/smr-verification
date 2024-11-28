@@ -15,8 +15,7 @@ bug-reports: "https://cp-git.kaist.ac.kr/verification/smr/issues"
 dev-repo: "git+https://cp-git.kaist.ac.kr/verification/smr.git"
 
 depends: [
-  "coq-iris"  { = "dev.2023-06-14.0.f0e415b6" }
-  "coq-diaframe" { = "dev.2023-06-15.0.1c3b5549" }
+  "coq-iris"  { = "4.3.0" }
 ]
 
 build: [make "-j%{jobs}%" ]

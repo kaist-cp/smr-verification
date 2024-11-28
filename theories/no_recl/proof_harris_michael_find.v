@@ -21,12 +21,8 @@ Lemma hm_find_inner_wrong_proph E (prev curr : loc) cn (k : Z) (pr : proph_id) p
   (curr +ₗ next) ↦□ #(cn &ₜ 1) -∗
   WP hm_find_inner #pr #k #prev #curr @ E {{ v, Φ v}}.
 Proof.
-  iIntros (Hpr) "pr #c.n↦□".
-  wp_lam. wp_pures.
-  wp_apply (wp_new_proph with "[//]") as (??) "_".
-  wp_load. wp_pures.
-  wp_apply (wp_resolve_proph with "pr") as  (pvs') "[%Heq _]".
-  subst pr_v. inversion Hpr.
+  iIntros (Hpr) "pr #c.n↦□". wp_lam. wp_pures.
+  wp_apply (wp_resolve_load with "[$pr $c.n↦□]") as (?) "(-> & _ & _)". inversion Hpr.
 Qed.
 
 Lemma hm_helping_cas_spec :
@@ -64,7 +60,7 @@ Proof.
   (* Get info about c *)
   iAssert (⌜b = true ∧ L.*2 !! (idx + 1 + 1)%nat = (Some curr)⌝)%I as %([= ->] & HLa_next).
   { iDestruct (Nodes_rm_idx_remove with "Nodes") as (?) "[(_ & _ & an.n↦ & %) _]"; [exact HLa|lia|].
-    destruct b; by iDestruct (mapsto_agree with "an.n↦ an.n↦□") as %[= ->].
+    destruct b; by iDestruct (pointsto_agree with "an.n↦ an.n↦□") as %[= ->].
   }
   (* Update L *)
   set (L' := delete (S idx) L).
@@ -100,7 +96,7 @@ Proof.
       { assert (idx < length L); [|lia]. rewrite -lookup_lt_is_Some. eauto. }
       iSplitR "NodesDrop"; last first.
       { iApply (big_sepL_mono with "NodesDrop"). iIntros (idx' [[k' b'] l'] HLl') "l'".
-        rewrite take_length_le; [|done]. case_decide; [lia|].
+        rewrite length_take_le; [|done]. case_decide; [lia|].
         iDestruct "l'" as (l'_next) "($ & $ & l'.n↦ & %HLl'next)".
         iExists (l'_next). iFrame. iPureIntro.
         rewrite list_fmap_delete lookup_delete_ge; [|lia].
@@ -112,11 +108,11 @@ Proof.
         case_decide as EQN. { subst idx'. rewrite lookup_take_Some in HLl'. lia. }
         iDestruct "l'" as (l'_next) "($ & $ & l'.n↦ & %HLl'next)".
         iExists (l'_next). iFrame. iPureIntro.
-        apply lookup_lt_Some in HLl' as LT. rewrite take_length_le in LT; [|lia].
+        apply lookup_lt_Some in HLl' as LT. rewrite length_take_le in LT; [|lia].
         by rewrite list_fmap_delete lookup_delete_lt; [|lia].
       }
       iExists (Some curr). iFrame "∗#%". iPureIntro.
-      rewrite Nat.add_0_r list_fmap_delete lookup_delete_ge take_length_le; [try lia..].
+      rewrite Nat.add_0_r list_fmap_delete lookup_delete_ge length_take_le; [try lia..].
       get_third HLc. rewrite -HLc. f_equal. lia.
     - iPureIntro. subst L'. split_and!.
       + rewrite !list_fmap_delete. by apply delete_inf_Z_sorted.
@@ -196,17 +192,16 @@ Local Lemma hm_find_inner_spec  (* Auxillary, non-unifiable *) Φ (k : Z) E
         (* Succeed CAS and continue. *)
         (∃ (ret_b : bool) (ret_prev ret_curr : loc),
           ⌜v = SOMEV (#ret_b, #ret_prev, #ret_curr)⌝ ∗
-          (True -∗ Φ (#ret_b, #ret_prev, #ret_curr)%V))
+          Φ (#ret_b, #ret_prev, #ret_curr)%V)
       else
         ⌜v = SOMEV (#(bool_decide (c_k = k)), #prev, #curr)⌝
   }}}.
 Proof.
   intros p_k_LT_k Hpr ?.
   iIntros (Φ') "(#IsHM & #p↪□ & #c↪□ & pr & AU) HΦ'".
-  iLöb as "IH" forall (tagged prev curr p_k c_k pr pr_v Hpr p_k_LT_k) "p↪□ c↪□".
+  iLöb as "IH" forall (tagged prev curr p_k c_k pr_v Hpr p_k_LT_k) "p↪□ c↪□".
   wp_lam. wp_pures.
-  wp_apply (wp_new_proph with "[//]") as (pr_v' pr') "pr'".
-  wp_pures. wp_bind (! _)%E.
+  wp_bind (Resolve _ _ _)%E.
   iInv "IsHM" as (p_all L) "(>Linv & >●p_all & >PTRS & Nodes & >(%HL & %HLh & %HLt))".
   iDestruct (ghost_map_lookup with "●p_all c↪□") as %Hptrs_curr.
   iDestruct (get_persistent_AllPtrs with "PTRS") as "#[c.k↦□ c_next]"; [exact Hptrs_curr|].
@@ -217,33 +212,26 @@ Proof.
     iDestruct "c_next" as "[c_next|%HLcurr]"; last first.
     { apply elem_of_list_lookup in HLcurr as [idx HLcurr].
       iDestruct (Nodes_remove with "Nodes") as (c_next) "[(_ & _ & c.n↦ & >%HLc_next) Nodes]"; [exact HLcurr|].
-      wp_load. iDestruct (Nodes_combine with "Nodes [] [] [c.n↦]") as "Nodes"; [done..|].
-      iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
-      { repeat iExists _. by iFrame "∗#%". }
-      wp_pures.
-      wp_apply (wp_resolve_proph with "pr") as (?) "[%Heq _]".
-      rewrite Heq in Hpr. inversion Hpr.
+      wp_apply (wp_resolve_load with "[$pr $c.n↦]") as (?) "(-> & _ & _)". inversion Hpr.
     }
     iDestruct "c_next" as (c_next c_n_k) "[c.n↦□ c_next↪□]".
-    wp_load.
+    wp_apply (wp_resolve_load with "[$pr $c.n↦□]") as (pr_v') "(-> & pr & _)".
     iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
     { repeat iExists _. by iFrame "∗#%". }
-    wp_pures.
-    wp_apply (wp_resolve_proph with "pr") as (pvs') "_".
-    wp_pures. clear dependent L p_all pr pr_v pvs'.
-    wp_apply (hm_helping_cas_spec true with "[$pr' $AU]"); simpl in *; [done|exact p_k_LT_k|by iFrame "#"|].
-    iIntros ([]) "[pr' AU]"; wp_pures; last first.
+    wp_pures. clear dependent L p_all.
+    wp_apply (hm_helping_cas_spec true with "[$pr $AU]"); simpl in *; [done|exact p_k_LT_k|by iFrame "#"|].
+    iIntros ([]) "[pr AU]"; wp_pures; last first.
     { iApply "HΦ'". iModIntro. iLeft. iSplit; [done|iFrame "AU"]. }
     destruct (decide (prophecy_to_bool pr_v' ∨ (c_n_k < k)%inf_Z)) as [NotCommit|[Hpr_v'%Is_true_false GE]%Decidable.not_or].
-    { iApply ("IH" with "[%] [%] pr' [AU] [HΦ'] p↪□ c_next↪□"); [done..| |].
+    { iApply ("IH" with "[%] [%] pr [AU] [HΦ'] p↪□ c_next↪□"); [done..| |].
       all: repeat case_decide; done.
     }
     (* assert that we are not tagged. *)
     iDestruct "AU" as "[[% c_next.n↦□]|HΦ]".
-    { by iApply (hm_find_inner_wrong_proph with "pr' c_next.n↦□"). }
+    { by iApply (hm_find_inner_wrong_proph with "pr c_next.n↦□"). }
     (* Committed. *)
     wp_pures.
-    iApply ("IH" $! false with "[%] [%] pr' [] [HΦ HΦ'] p↪□ c_next↪□"); [done|done|..].
+    iApply ("IH" $! false with "[%] [%] pr [] [HΦ HΦ'] p↪□ c_next↪□"); [done|done|..].
     - case_decide; [naive_solver|done].
     - case_decide as EQN; [done|].
       iIntros "!>" (? ->). iApply "HΦ'". iRight.
@@ -253,16 +241,11 @@ Proof.
   (* assert that we must not be tagged. *)
   iDestruct "c_next" as "[c_next|%HLcurr]".
   { iDestruct "c_next" as (c_next ?) "#[c.n↦□ _]".
-    wp_load.
-    iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
-    { repeat iExists _. by iFrame "∗#%". }
-    wp_pures.
-    wp_apply (wp_resolve_proph with "pr") as (pvs') "[%Heq _]".
-    rewrite Heq in Hpr. inversion Hpr.
+    wp_apply (wp_resolve_load with "[$pr $c.n↦□]") as (?) "(-> & _ & _)". inversion Hpr.
   }
   apply elem_of_list_lookup in HLcurr as [idx HLcurr].
   iDestruct (Nodes_remove with "Nodes") as (c_next) "[(_ & _ & c.n↦ & >%HLc_next) Nodes]"; [exact HLcurr|].
-  wp_load.
+  wp_apply (wp_resolve_load with "[$pr $c.n↦]") as (pr_v') "(-> & pr & c.n↦)".
   iDestruct (Nodes_combine with "Nodes [] [] [c.n↦]") as "Nodes"; [done..|].
   iAssert (ghost_var γl (1 / 2) (get_abs_state L) ∗ Nodes L γp_a -∗
             ▷ HListInternalInv h γp_a γl)%I with "[●p_all PTRS]" as "INV".
@@ -270,15 +253,11 @@ Proof.
   (* Check if we already committed or not. *)
   destruct (decide (c_k < k)%inf_Z) as [LT|GE]; last first.
   { (* Already committed *)
-    case_decide; [naive_solver|]. iClear "AU pr'".
+    case_decide; [naive_solver|]. iClear "AU IH".
     iModIntro. iSplitL "INV Nodes Linv"; [iApply "INV"; iFrame|].
-    wp_pures.
-    wp_apply (wp_resolve_proph with "pr") as (pvs') "[_ _]".
-    wp_pures.
-    clear dependent L p_all pr pr_v pvs'.
-    wp_load. wp_pures.
+    wp_pures. wp_load. wp_pures.
     iEval (case_bool_decide; [naive_solver|]).
-    wp_pures. iApply "HΦ'". iPureIntro. done.
+    wp_pures. by iApply "HΦ'".
   }
   destruct (next_not_tail_is_Some idx L c_k false curr c_next) as [c_next' [= ->]]; [naive_solver..|].
   rename c_next' into c_next.
@@ -290,24 +269,20 @@ Proof.
   destruct (decide (prophecy_to_bool pr_v' ∨ (cn_k < k)%inf_Z)) as [NotCommit|[Hpr_v'%Is_true_false GE]%Decidable.not_or].
   { (* Tagged or key too small. Do not commit. *)
     iModIntro. iSplitL "INV Nodes Linv"; [iApply "INV"; iFrame|].
-    wp_pures.
-    wp_apply (wp_resolve_proph with "pr") as (pvs') "[_ _]".
     wp_pures. wp_load. wp_pures.
     iEval (case_bool_decide; [|naive_solver]).
     wp_pures.
     case_decide; [|naive_solver].
-    iApply ("IH" with "[%] [%] pr' [AU] [HΦ'] c↪□ c_next↪□"); [done|done|..].
-    all: repeat case_decide; done.
+    iApply ("IH" with "[%] [%] pr [AU] [HΦ'] c↪□ c_next↪□"); [done|done|..].
+    all: repeat case_decide; try done.
   }
   (* curr must not be tagged *)
   destruct b.
   { iModIntro. iSplitL "Linv Nodes INV"; [iApply "INV"; iFrame|].
-    wp_pures.
-    wp_apply (wp_resolve_proph with "pr") as  (?) "_".
     wp_pures. wp_load. wp_pures.
     iEval (case_bool_decide; [|naive_solver]).
     wp_pures.
-    by iApply (hm_find_inner_wrong_proph with "pr' c_next.n↦□").
+    by iApply (hm_find_inner_wrong_proph with "pr c_next.n↦□").
   }
   case_decide; [|naive_solver].
   (* Not tagged and key is GE. Commit. *)
@@ -332,12 +307,10 @@ Proof.
     - by rewrite Nat.sub_diag.
   }
   iModIntro. iSplitL "INV Nodes Linv"; [iApply "INV"; iFrame|].
-  wp_pures.
-  wp_apply (wp_resolve_proph with "pr") as (?) "[_ _]".
   wp_pures. wp_load. wp_pures.
   iEval (case_bool_decide; [|naive_solver]).
   wp_pures.
-  iApply ("IH" $! false with "[%] [%] pr' [] [HΦ HΦ'] c↪□ c_next↪□"); [done..| |].
+  iApply ("IH" $! false with "[%] [%] pr [] [HΦ HΦ'] c↪□ c_next↪□"); [done..| |].
   - case_decide; [naive_solver|done].
   - case_decide as EQN; [done|].
     iIntros "!>" (v ->). iApply "HΦ'". iRight.
@@ -352,12 +325,8 @@ Proof.
   iLöb as "IH".
   wp_lam. wp_pures.
   wp_apply (wp_new_proph with "[//]") as (pr_v pr) "pr".
-  wp_pures. wp_bind (! _)%E.
-  iInv "IsHM" as (p_all L) "(>Linv & >●p_all & PTRS & Nodes & >(%HL & %HLh & %HLt))".
-  wp_load.
-  iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
-  { repeat iExists _. by iFrame "∗#%". }
-  clear dependent p_all L. wp_pures. wp_bind (! _)%E.
+  wp_pures. wp_load. wp_pures.
+  wp_bind (! _)%E.
   iInv "IsHM" as (p_all L) "(>Linv & >●p_all & PTRS & Nodes & >(%HL & %HLh & %HLt))".
   iDestruct (Nodes_remove with "Nodes") as (on) "[(#h.k↦□ & _ & h.n↦ & >%HLh_next) Nodes]"; [exact HLh|].
   wp_load.

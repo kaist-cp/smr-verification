@@ -17,7 +17,7 @@ From smr.hazptr Require Export code_ms proof_ms.
 From smr.hazptr Require Export code_dglm proof_dglm.
 From smr.hazptr Require Export spec_rdcss code_rdcss proof_rdcss.
 From smr.hazptr Require Export spec_cldeque code_cldeque proof_cldeque.
-From smr.hazptr Require Export spec_ordered_set code_harris_operations proof_harris_michael_find.
+From smr.hazptr Require Export spec_ordered_set code_harris_operations proof_harris_michael_find proof_harris_find.
 
 From iris.prelude Require Import options.
 
@@ -30,11 +30,12 @@ Definition msqueueN := nroot .@ "msqueue".
 Definition dglmN := nroot .@ "dglm".
 Definition rdcssN := nroot .@ "rdcss".
 Definition cldequeN := nroot .@ "cldeque".
+Definition hsN := nroot .@ "hs".
 Definition hmsN := nroot .@ "hms".
 
 Class hazptrG Σ := HazPtrG {
-  hazptr_reclamationG :> reclamationG Σ;
-  hazptr_slot_bag :> slot_bag_olocG Σ;
+  #[local] hazptr_reclamationG :: reclamationG Σ;
+  #[local] hazptr_slot_bag :: slot_bag_olocG Σ;
 }.
 
 Definition hazptrΣ : gFunctors := #[reclamationΣ; slot_bag_olocΣ].
@@ -275,3 +276,7 @@ Definition harris_op_impl Σ N (DISJN : N ## hazptrN) `{!heapGS Σ, !hazptrG Σ,
 Program Definition hm_impl Σ `{!heapGS Σ, !hazptrG Σ, !hlG Σ}
     : ordset_spec Σ hmsN hazptrN ltac:(solve_ndisj) (hazard_pointer_impl Σ) :=
   harris_op_impl Σ hmsN ltac:(solve_ndisj) (hm_impl Σ hmsN hazptrN ltac:(solve_ndisj) (hazard_pointer_impl Σ)).
+
+Program Definition harris_impl Σ `{!heapGS Σ, !hazptrG Σ, !hlG Σ}
+    : ordset_spec Σ hsN hazptrN ltac:(solve_ndisj) (hazard_pointer_impl Σ) :=
+  harris_op_impl Σ hsN ltac:(solve_ndisj) (harris_impl Σ hsN hazptrN ltac:(solve_ndisj) (hazard_pointer_impl Σ)).

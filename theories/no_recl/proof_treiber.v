@@ -1,4 +1,3 @@
-From iris.algebra Require Import agree.
 From iris.base_logic.lib Require Import invariants ghost_var.
 From smr.program_logic Require Import atomic.
 From smr.lang Require Import proofmode notation.
@@ -7,7 +6,7 @@ From iris.prelude Require Import options.
 From smr Require Import helpers no_recl.spec_stack no_recl.code_treiber.
 
 Class treiberG Σ := TreiberG {
-  treiber_ghost_varG :> ghost_varG Σ (list val);
+  #[local] treiber_ghost_varG :: ghost_varG Σ (list val);
 }.
 
 Definition treiberΣ : gFunctors := #[ghost_varΣ (list val)].
@@ -75,11 +74,11 @@ Lemma tstack_new_spec :
 Proof.
   iIntros (Φ) "!> _ HΦ".
   wp_lam. wp_alloc st as "st↦" "†st". wp_pures.
-  rewrite array_singleton loc_add_0. wp_store.
+  rewrite array_singleton Loc.add_0. wp_store.
   iMod (ghost_var_alloc []) as (γs) "[γs γs_I]".
   iAssert (TStack γs []) with "γs_I" as "S".
   iMod (inv_alloc treiberN _ (TStackInternalInv st γs) with "[-HΦ S]") as "#Inv".
-  { iNext. iExists None, []. rewrite loc_add_0. iFrame "∗#". }
+  { iNext. iExists None, []. rewrite Loc.add_0. iFrame "∗#". }
   iApply "HΦ". by iFrame "∗#%".
 Qed.
 
@@ -112,7 +111,7 @@ Proof.
   - (* successful CAS; commit push *) iClear "IH".
     iMod (array_persist with "new↦") as "new↦".
     wp_cmpxchg_suc.
-    iAssert (phys_list (Some (blk_to_loc new)) (x::xs2)) with "[new↦ Nodes]" as "Nodes'"; first by exfr.
+    iAssert (phys_list (Some (Loc.blk_to_loc new)) (x::xs2)) with "[new↦ Nodes]" as "Nodes'"; first by exfr.
 
     iMod "AU" as (?) "[γs' [_ Commit]]".
 
@@ -152,7 +151,7 @@ Proof using All.
     (* close inv *)
     iModIntro. iSplitL "Nodes st.h↦ γs"; first by (iExists None,[]; exfr).
     wp_pures.
-    iApply "HΦ". done.
+    iApply "HΦ".
   }
 
   (* prove for non-empty stack case and restore AU *)
@@ -183,7 +182,7 @@ Proof using All.
 
     wp_apply (wp_load_offset with "h↦") as "_"; [by simplify_list_eq|].
 
-    wp_pures. iApply "HΦ". done.
+    wp_pures. iApply "HΦ".
 
   - (* failed CAS; restore AU *)
     wp_cmpxchg_fail.

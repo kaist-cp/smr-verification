@@ -11,8 +11,8 @@ From iris.prelude Require Import options.
 Set Printing Projections.
 
 Class rcu_traversalG Σ := RCUTraversalG {
-  rcu_traversal_nlhG :> node_link_historyG Σ;
-  rcu_traversal_gmapG :> ghost_mapG Σ blk positive;
+  #[local] rcu_traversal_nlhG :: node_link_historyG Σ;
+  #[local] rcu_traversal_gmapG :: ghost_mapG Σ blk positive;
 }.
 
 Definition rcu_traversalΣ: gFunctors := #[node_link_historyΣ; ghost_mapΣ blk positive].
@@ -89,7 +89,7 @@ Definition Deleted γd (p : blk) (i : positive) (ty : type Σ) : iProp Σ :=
 Definition RCUPointsTo γd (p : blk) (i : positive) (o : nat) (to : option (blk * positive * type Σ)) : iProp Σ :=
   ∃ γb γh,
     ⌜γd = encode (γb, γh)⌝ ∗
-    HistPointsTo γh i o (snd ∘ fst <$> to) ∗
+    HistPointsToLast γh i o (snd ∘ fst <$> to) ∗
     if to is Some (q, j, ty) then
       base.(BaseNodeInfo) γb q j ty.(ty_sz) ty.(ty_res)
     else True
@@ -119,8 +119,6 @@ Qed.
 Global Instance RCUNodeInfo_Persistent γd γg p i ty : Persistent (RCUNodeInfo γd γg p i ty).
 Proof. apply _. Qed.
 
-Local Ltac exfr := repeat (repeat iExists _; iFrame "∗#").
-
 Lemma rcu_domain_new_spec :
   rcu_domain_new_spec' N base.(rcu_domain_new) IsRCUDomain.
 Proof.
@@ -131,12 +129,11 @@ Proof.
 
   iMod (hist_alloc) as (γh) "HA".
   remember (encode (γb, γh)) as γ.
-  iApply "HΦ".
-  exfr.
+  iApply "HΦ". iFrame "∗#%".
 
   iMod (inv_alloc (mgmtN N.@"traversal") _  (∃ Im Rs h, RCUInv γb γh Im Rs h)
     with "[BRA HA]") as "$"; [| done].
-  iModIntro. iExists ∅, ∅, []. exfr. iPureIntro. split; set_solver.
+  iModIntro. iExists ∅, ∅, []. iFrame. iPureIntro. split; set_solver.
 Qed.
 
 
@@ -167,11 +164,11 @@ Proof.
         with "[HA SM HPT]" as ">(HA & SM & HPT)".
     {
       clear lv Hsz. rewrite Hsuccs in H2. rewrite Hsuccs. clear Hsuccs H2.
-      iInduction succs as [| a succs'] "IH" using rev_ind.
-      - subst h''. simpl. rewrite app_nil_r. exfr. done.
+      iInduction succs as [| a succs' IH] using rev_ind.
+      - subst h''. simpl. rewrite app_nil_r. iFrame. done.
       - iEval (unfold RCUNodeSuccManageds; rewrite big_sepL_snoc) in "SM".
         iDestruct "SM" as "[SM' last_M]". fold (RCUNodeSuccManageds N Managed γd succs').
-        iEval (rewrite app_length; simpl; rewrite seq_app; rewrite Nat.add_0_l; simpl;
+        iEval (rewrite length_app; simpl; rewrite seq_app; rewrite Nat.add_0_l; simpl;
                rewrite big_sepL_snoc) in "HPT". iDestruct "HPT" as "[HPT' last_HP]".
 
 
@@ -185,21 +182,20 @@ Proof.
             iDestruct "last_M" as (???) "[BM _]". encode_agree Hγ. iDestruct (spec_rcu_base.managed_get_node_info with "BM") as "$".
           }
           iAssert (|==> HistAuth γh (h_prev ++ [link i (length succs') (Some p')])
-              ∗ HistPointsTo γh i (length succs') (Some p')
+              ∗ HistPointsToLast γh i (length succs') (Some p')
               ∗ Managed γd b p' t (g ⊎ {[+ i +]}))%I
                 with "[HistAuth' last_HP last_M]" as ">($ & last_HP' & last_M')". {
             iDestruct "last_M" as (???) "[BM HPB]". encode_agree Hγ.
-            iMod (hist_points_to_link with "HistAuth' last_HP HPB")as "($ & $ & HPB')". exfr. done.
+            iMod (hist_points_to_link with "HistAuth' last_HP HPB")as "($ & $ & HPB')". iFrame "∗#%". done.
           }
           iAssert (|==> RCUNodeSuccManageds N Managed γd (succs_add_pred (succs' ++ [Some (b, p', t, g)]) i))%I
-            with "[SM' last_M']" as ">$". { unfold succs_add_pred. rewrite fmap_app. exfr. auto. }
-          exfr. simpl. rewrite Nat.add_0_r. iSplitL; try done. exfr. done.
-
+            with "[SM' last_M']" as ">$". { unfold succs_add_pred. rewrite fmap_app. iFrame "∗#%". auto. }
+          iFrame "∗#%". simpl. rewrite Nat.add_0_r. iSplitL; try done.
         + iMod (hist_points_to_unlink_simple with "HistAuth' last_HP") as "[$ last_HP]".
           iAssert (RCUNodeSuccManageds N Managed γd (succs_add_pred (succs' ++ [None]) i)) with "[SM']" as "$". {
-            iClear "#". unfold RCUNodeSuccManageds, succs_add_pred. rewrite fmap_app. simpl. rewrite big_sepL_snoc. exfr.
+            iClear "#". unfold RCUNodeSuccManageds, succs_add_pred. rewrite fmap_app. simpl. rewrite big_sepL_snoc. iFrame.
           }
-          rewrite big_sepL_snoc. exfr. done.
+          rewrite big_sepL_snoc. iFrame "∗#%". done.
     }
 
     iMod (fupd_mask_subseteq E') as "Close"; [solve_ndisj|].
@@ -210,7 +206,7 @@ Proof.
 
   (* close inv *)
   iModIntro. iSplitL "BRA HA".
-  { iClear "#". clear -RIC Hi H2 Hsuccs. exfr. iPureIntro. destruct RIC as [ric1 ric2].
+  { iClear "#". clear -RIC Hi H2 Hsuccs. iFrame "∗#%". iPureIntro. destruct RIC as [ric1 ric2].
     assert (∃ sz', ty.(ty_sz) = S sz') as [sz' ->]. { exists (ty.(ty_sz) - 1). lia. }
     split.
     - intros. unfold event_id. repeat rewrite fmap_app. rewrite dom_insert.
@@ -221,7 +217,7 @@ Proof.
 
   (* Managed *)
   iModIntro. iExists i. iSplit. { iPureIntro. set_solver +Hi. } iFrame.
-  iExists _,_. rewrite Hsz. iFrame (Hγ) "∗".
+  iExists _. rewrite Hsz. iFrame (Hγ) "∗".
 Qed.
 
 Lemma guard_new_spec :
@@ -230,7 +226,7 @@ Proof.
   intros ????. iIntros "#IRD" (Φ) "!> _ HΦ".
   iDestruct "IRD" as (??) "(%Hγ & #BIRD & #RI)".
   wp_apply (spec_rcu_base.guard_new_spec with "BIRD [//]") as (g) "BG"; [solve_ndisj|].
-  iApply "HΦ". exfr. done.
+  iApply "HΦ". iFrame "∗#%".
 Qed.
 
 Lemma guard_activate_spec :
@@ -244,7 +240,7 @@ Proof.
   iInv "RI" as (???) ">(BRA & HA & %RIC)".
   iDestruct (hist_take_snapshot with "HA") as "#HS".
   iMod (rcu_auth_guard_subset with "BIRD BRA BG") as "(BRA & BG & %HSyn)"; [solve_ndisj|].
-  iModIntro. iSplitL "BRA HA". { exfr. done. }
+  iModIntro. iSplitL "BRA HA". { iFrame "∗#%". }
   iMod ghost_map_alloc_empty as (γrg) "I".
   remember (encode (γbg, γrg)) as γg.
   iModIntro.
@@ -257,11 +253,9 @@ Proof.
                         | del i => Some i
                         end) h)).
   iExists Syn,∅,h.
-  exfr. rewrite big_sepM_empty.
+  iFrame "∗#%". rewrite big_sepM_empty.
   iPureIntro. repeat split.
   - done.
-  - done.
-  - set_solver.
   - set_unfold. move => i /HSyn /RIC.(ric_live_unretired) Del.
     rewrite elem_of_list_omap. exists (del i). split; [|done]. set_solver.
   - move => NotIn In. apply NotIn.
@@ -280,7 +274,7 @@ Proof.
   iDestruct "IRD" as (?? Hγ) "[BRD _]".
   iDestruct "G" as (??????????) "(BG & HS & I & Prot & %DISJ & %GC)". encode_agree Hγ.
   wp_apply (spec_rcu_base.guard_deactivate_spec with "BRD BG") as "BI"; [solve_ndisj| ].
-  iApply "HΦ". exfr. done.
+  iApply "HΦ". iFrame "∗#%".
 Qed.
 
 Lemma guard_drop_spec :
@@ -320,19 +314,19 @@ Proof.
   iMod (spec_rcu_base.guard_protect_node_info with "BRD BInfo BG") as "(BG & #BGInfo & _)"; [solve_ndisj|done|].
   rewrite insert_insert.
   iModIntro. iSplitL "BRA HA".
-  { exfr. iFrame "%". }
-  iAssert (Managed γd p i ty B) with "[BM HPB]" as "$"; first by exfr.
+  { iFrame "∗#%". }
+  iAssert (Managed γd p i ty B) with "[BM HPB]" as "$"; first by iFrame.
 
   iAssert (|={E}=> Guard γd γg g ∗ p ↪[γrg]□ i)%I with "[BG HS I]" as ">[$ #p]"; last first.
-  { iModIntro. repeat iExists _. iFrame (Hγ) "#%". }
+  { iFrame "∗#%". done. }
 
   destruct (G !! p) as [i'|] eqn:InG.
   - specialize (Lookup_p ltac:(done)) as [= ->].
     rewrite insert_id //.
     iDestruct (big_sepM_lookup with "Prot") as "#$"; [exact InG|].
-    iModIntro. exfr. done.
+    iModIntro. iFrame "∗#%".
   - iMod (ghost_map_insert_persist p i with "I") as "[I #$]"; [done|].
-    iModIntro. exfr. iFrame "%". iSplit.
+    iModIntro. iFrame "∗#%". iSplit.
     { rewrite big_sepM_insert; [|done]. iFrame "#". }
     iPureIntro. rewrite range_insert; [|done].
     rewrite disjoint_union_r. split; [|done].
@@ -356,22 +350,22 @@ Proof.
   iInv "RI" as (???) ">(BRA & HA & %RIC)". simpl.
   iDestruct (hist_optimistic_traversal with "HA HS HPT") as %Hlive2%(GC.(gc_live_not_detached)).
   { by apply GC.(gc_live_not_detached) in Hguarded1. }
-  iModIntro. iSplitL "BRA HA". { exfr. done. }
+  iModIntro. iSplitL "BRA HA". { iFrame. done. }
   assert (i2 ∉ Syn).
   { destruct GC. set_solver. }
   iMod (spec_rcu_base.guard_protect_node_info with "BIRD BNI2 BG") as "(BG & #BGI2 & %Lookup_p)"; [solve_ndisj|done|].
-  iSplitL "HPT". { exfr. done. }
+  iSplitL "HPT". { iFrame "∗#%". done. }
 
   iAssert (|={E}=> Guard γd γg g ∗ p2 ↪[γrg]□ i2)%I with "[BG HS I]" as ">[$ #p]"; last first.
-  { iModIntro. repeat iExists _. iFrame (Hγd) "#%". }
+  { iFrame "∗#%". done. }
 
   destruct (G !! p2) as [i'|] eqn:InG.
   - specialize (Lookup_p ltac:(done)) as [= ->].
     rewrite insert_id //.
     iDestruct (big_sepM_lookup with "Prot") as "#$"; [exact InG|].
-    iModIntro. exfr. done.
+    iModIntro. iFrame "∗#%".
   - iMod (ghost_map_insert_persist p2 i2 with "I") as "[I #p]"; [done|].
-    iModIntro. exfr. iFrame "%". iSplit.
+    iModIntro. iFrame "∗#%". iSplit.
     { rewrite big_sepM_insert; [|done]. iFrame "#". }
     iPureIntro. rewrite range_insert; [|done].
     rewrite disjoint_union_r. split; [|done].
@@ -390,8 +384,8 @@ Proof.
   iApply fupd_mask_intro; [solve_ndisj|]. iIntros "Close2".
   iExists lv. iFrame.
 
-  iSplitL "RG HS I".
-  { exfr. done. }
+  iSplit.
+  { iFrame "∗#%". }
 
   iIntros (lv') "[p↦ R]".
   iDestruct (ty_sz_eq with "R") as "#>%".
@@ -410,7 +404,7 @@ Proof.
   iApply fupd_mask_intro; [solve_ndisj|]. iIntros "Close2".
   iExists lv. iFrame.
 
-  iSplitL "BM HPB". { exfr. done. }
+  iSplit. { iFrame "∗#%". }
 
   iIntros (lv') "[p↦ R]".
   iDestruct (ty_sz_eq with "R") as "#>%".
@@ -423,13 +417,13 @@ Lemma deleted_acc :
   deleted_acc' N Deleted.
 Proof.
   iIntros (??????) "D".
-  iDestruct "D" as (???) "[BM HD]".
+  iDestruct "D" as (???) "[BM #HD]".
   iMod (spec_rcu_base.managed_acc with "BM") as (lv) "(% & p↦ & R & BM & Close1)"; [solve_ndisj|].
 
   iApply fupd_mask_intro; [solve_ndisj|]. iIntros "Close2".
   iExists lv. iFrame.
 
-  iSplitL "BM HD". { exfr. done. }
+  iSplit. { iFrame "∗#". done. }
 
   iIntros (lv') "[p↦ R]".
   iDestruct (ty_sz_eq with "R") as "#>%".
@@ -473,12 +467,12 @@ Proof.
   iMod (hist_points_to_link with "HA HPT HPB") as "(HA & HPT & HPB)".
 
   iModIntro.
-  iSplitL "HA BRA". { exfr. iPureIntro. destruct RIC. split; unfold LiveAt in *; set_solver. }
+  iSplitL "HA BRA". { iFrame "∗#%". iPureIntro. destruct RIC. split; unfold LiveAt in *; set_solver. }
 
   iModIntro.
   iDestruct (spec_rcu_base.managed_get_node_info with "BM") as "#Info_i2".
 
-  iSplitL "HPT"; by exfr.
+  iSplitL "HPT"; by iFrame "∗#%".
 Qed.
 
 Lemma rcu_points_to_unlink :
@@ -496,10 +490,10 @@ Proof.
   iMod (hist_points_to_unlink with "HA HPT HPB") as "(HA & HPT & HPB)".
 
   iModIntro.
-  iSplitL "HA BRA". { exfr. iPureIntro. destruct RIC. split; unfold LiveAt in *; set_solver. }
+  iSplitL "HA BRA". { iFrame "∗#%". iPureIntro. destruct RIC. split; unfold LiveAt in *; set_solver. }
   iModIntro.
 
-  iSplitL "HPT"; by exfr.
+  iSplitL "HPT"; by iFrame "∗#%".
 Qed.
 
 Lemma rcu_points_to_update :
@@ -518,12 +512,12 @@ Proof.
   iMod (hist_points_to_update with "HA HPT fHPB tHPB") as "(HA & HPT & fHPB & tHPB)".
 
   iModIntro.
-  iSplitL "HA BRA". { exfr. iPureIntro. destruct RIC. split; unfold LiveAt in *; set_solver. }
+  iSplitL "HA BRA". { iFrame "∗#%". iPureIntro. destruct RIC. split; unfold LiveAt in *; set_solver. }
   iModIntro.
 
   iDestruct (spec_rcu_base.managed_get_node_info with "tBM") as "#tBInfo".
-  iSplitL "HPT". { exfr. done. }
-  iSplitL "fBM fHPB"; by exfr.
+  iSplitL "HPT". { iFrame "∗#%". }
+  iSplitL "fBM fHPB"; by iFrame "∗#%".
 Qed.
 
 Lemma managed_delete :
@@ -537,13 +531,13 @@ Proof.
 
   iDestruct (hist_pointedby_is_registered with "HA HPB") as %InHist_i.
 
-  iMod (hist_delete_node with "HA HPB") as "[HA HD]".
+  iMod (hist_delete_node with "HA HPB") as "[HA #HD]".
 
   iModIntro.
-  iSplitL "HA BRA". { exfr. iPureIntro. destruct RIC. split; unfold LiveAt in *; set_solver. }
+  iSplitL "HA BRA". { iFrame. iPureIntro. destruct RIC. split; unfold LiveAt in *; set_solver. }
   iModIntro.
 
-  exfr. done.
+  iFrame "∗#%".
 Qed.
 
 Lemma deleted_clean :
@@ -551,18 +545,18 @@ Lemma deleted_clean :
 Proof.
   iIntros (???????????) "#IRD D M".
   iDestruct "IRD" as (?? Hγ) "[#BIRD #RI]".
-  iDestruct "D" as (???) "[BMD HD]".
+  iDestruct "D" as (???) "[BMD #HD]".
   iDestruct "M" as (???) "[BM HPB]". do 2 encode_agree Hγ.
 
   iInv "RI" as (???) ">(BRA & HA & %RIC)".
 
-  iMod (hist_pointedby_remove_deleted with "HA HD HPB") as "(HA & HD & HPB)".
+  iMod (hist_pointedby_remove_deleted with "HA HD HPB") as "[HA HPB]".
 
   iModIntro.
-  iSplitL "HA BRA". { exfr. done. }
+  iSplitL "HA BRA". { iFrame "∗#%". }
   iModIntro.
 
-  iSplitL "BMD HD"; by exfr.
+  iSplitL "BMD HD"; by iFrame "∗#%".
 Qed.
 
 Lemma rcu_domain_retire_spec :
@@ -572,25 +566,25 @@ Proof.
   (* remove ▷ of HΦ *)
   iApply (wp_step_fupd _ E E _ (_ -∗ _)%I with "[$HΦ]"); [done..|].
   iDestruct "IRD" as (??) "(%Hγ & #BIRD & #RI)".
-  iDestruct "D" as (???) "[BM HD]". encode_agree Hγ.
+  iDestruct "D" as (???) "[BM #HD]". encode_agree Hγ.
 
   rewrite -Hsz.
   awp_apply (spec_rcu_base.rcu_domain_retire_spec with "BIRD BM"); [solve_ndisj..|].
   iInv "RI" as (???) ">(BRA & HA & %RIC)".
   iAaccIntro with "BRA".
-  { iIntros. iModIntro. exfr. done. }
+  { iIntros. iModIntro. iFrame. done. }
   iIntros "BRA".
 
-  iDestruct (hist_deleted_is_not_alive with "HA HD") as "%Hdel".
+  iDestruct (hist_deleted_is_not_alive with "HA HD") as %Hdel.
 
   iModIntro. iSplitL "BRA HA".
-  { exfr. iPureIntro. split.
+  { iFrame. iPureIntro. split.
     - apply RIC.(ric_dom).
     - intros i' Hi'. case (decide (i' = i)) as [->|NE].
       + clear -Hdel Hi'. by exfalso.
       + set_unfold. move => [//|]. by apply RIC.(ric_live_unretired). }
 
-  iIntros "_ HΦ". iApply "HΦ". done.
+  iIntros "HΦ". iApply "HΦ". done.
 Qed.
 
 Lemma rcu_domain_do_reclamation_spec :

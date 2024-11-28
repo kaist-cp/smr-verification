@@ -187,9 +187,9 @@ Definition rcu_domain_retire_spec' : Prop :=
   ↑(to_baseN mgmtN) ⊆ E →
   ⊢IsRCUDomain γe d -∗
   BaseManaged γe p i_p size_p R -∗
-  <<< ∀∀ Im Rs, RCUAuth γe Im Rs >>>
+  <<{ ∀∀ Im Rs, RCUAuth γe Im Rs }>>
     rcu_domain_retire #d #p #size_p @ E,↑(to_baseN mgmtN),∅
-  <<< RCUAuth γe Im ({[i_p]} ∪ Rs), RET #() >>>.
+  <<{ RCUAuth γe Im ({[i_p]} ∪ Rs) | RET #() }>>.
 
 Definition rcu_domain_do_reclamation_spec' : Prop :=
   ∀ E γe d,

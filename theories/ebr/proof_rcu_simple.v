@@ -166,7 +166,7 @@ Proof.
     { by rewrite -not_elem_of_dom Hdom not_elem_of_dom. }
 
     iSplit; repeat iExists _; iFrame (Hγd) "∗#".
-    iExists _,(<[ p:= _ ]> G),_. iFrame.
+    iExists (<[ p:= _ ]> G).
 
     rewrite (big_sepM2_insert _ _ _ p); [|done..].
     iFrame "#".
@@ -179,7 +179,6 @@ Proof.
   iDestruct (ghost_map_elem_agree with "i↪□ i↪□'") as %<-.
 
   iSplit; repeat iExists _; iFrame (Hγd) "∗#".
-  repeat iExists _. iFrame "∗#".
 Qed.
 
 Lemma guard_acc :
@@ -197,8 +196,8 @@ Proof.
   iApply fupd_mask_intro; [solve_ndisj|]. iIntros "Close2".
   iExists lv. iFrame "∗%".
 
-  iSplitL "BG".
-  { repeat iExists _. iFrame (Hγd) "∗#". repeat iExists _. iFrame "∗#". }
+  iSplit.
+  { iFrame "∗#". }
 
   iIntros (lv') "(%Hlv' & p↦ & R)".
 
@@ -217,8 +216,8 @@ Proof.
   iApply fupd_mask_intro; [solve_ndisj|]. iIntros "Close2".
   iExists lv. iFrame "∗%".
 
-  iSplitL "BM".
-  { repeat iExists _. iFrame (Hγd) "∗#". }
+  iSplit.
+  { iFrame "#". }
 
   iIntros (lv') "(%Hlv' & p↦ & R)".
 
@@ -278,12 +277,12 @@ Proof.
   awp_apply (spec_rcu_base.rcu_domain_retire_spec with "BIRD BM"); [solve_ndisj|].
   iInv "RI" as (???) ">(data & BRA & %Hdom)".
   iAaccIntro with "BRA".
-  { iIntros. iModIntro. iSplit; last done. iNext. repeat iExists _. iFrame. done. }
+  { iIntros. iFrame. done. }
   iIntros "BRA".
 
   iModIntro. iSplitL "BRA data".
-  { iNext. repeat iExists _. iFrame. done. }
-  iIntros "_ HΦ !>". iApply "HΦ". done.
+  { iFrame. done. }
+  iIntros "HΦ !>". iApply "HΦ". done.
 Qed.
 
 Lemma rcu_domain_do_reclamation_spec :

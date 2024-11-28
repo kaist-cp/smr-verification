@@ -16,16 +16,16 @@ Set Printing Projections.
 (* TODO: Fix names. e.g, info or Im? ptrs or ptrs? rL or Rs? *)
 
 Class ebrG Σ := EBRG {
-  ebr_reclG :> reclamationG Σ;
-  ebr_epoch_historyG :> epoch_historyG Σ;
+  #[export] ebr_reclG :: reclamationG Σ;
+  #[local] ebr_epoch_historyG :: epoch_historyG Σ;
   (* Epoch history is
      (1) not fractional
      (2) may be updated with the retire set not being updated.
      hence we use a separate ghost for the retire set.
    *)
-  ebr_epoch_rsetG :> ghost_varG Σ (gset positive);
-  ebr_epoch_gmapG :> ghost_mapG Σ blk positive;
-  ebr_mono_natsG :> mono_natsG Σ;
+  #[local] ebr_epoch_rsetG :: ghost_varG Σ (gset positive);
+  #[local] ebr_epoch_gmapG :: ghost_mapG Σ blk positive;
+  #[local] ebr_mono_natsG :: mono_natsG Σ;
 }.
 
 Definition ebrΣ : gFunctors := #[ reclamationΣ; epoch_historyΣ; ghost_varΣ (gset positive); ghost_mapΣ blk positive; mono_natsΣ ].
@@ -56,68 +56,65 @@ Implicit Types
   (Syn retired unlinked : gset positive)
 .
 
-(* TODO: Check if the description is still accurate.
-Summary of notable differences:
-* Guard-Activate (validating the local epoch)
-    1. obtains the tokens of all potentially reachable pointers (i.e. have not been unlinked until the current epoch)
-    2. obtains the permission to retire pointers at the current epoch ("epoch ownership")
-* Guard-Validate:
-    1. Should show that the guard already has token for the pointer.
-    2. The guard will activate the validation flag for its slot for its local epoch.
-* `may_advance`: check the lower bound of epoch numbers for each slot.  Mostly need to check validated guards.
-* `try_advance`
-    1. If we are the one advancing the epoch, domain should have all ownerships
-       needed to advance epoch, as there are no past guard.
-    2. for fully collected epoch, collect tokens for unlinked pointers
-* `do_reclamation` just takes already collected tokens
+(*
+Important ghosts
+* A guard at e asserts this flag, meaning that it is validated with epoch e.
+  ```
+  (sid e,sid idx) ↦P2[γV]{ 1/2/2 } true
+  ```
+  (Remaining 1/2 in GE_minus, 1/2/2 in SlotInfos)
+  (Here, sid doesn't mean anything. It's just injection from nat to positive.)
+  TODO: Maybe this can be 1D ghost instead: `(sid idx) ↦ Some e`
+  With this flag, the guard takes two kinds of ownership:
+  - permission to add retires at epoch e:
+    ```
+    epoch_history_frag γeh e {[sid si]}
+    ```
+  - preventing global epoch advancement from e+1 to e+2:
+    ```
+    mono_nats_auth γe_nums {[sid idx]} (1/2/2) e
+    ```
+    (Remaining 1/2 in GE_minus, 1/2/2 in SlotInfos. When not active, all 1 is in SlotInfos.)
+    This is indirectly asserted by `mono_nats_lb γe_nums ⊤ (ge - 1)` in SlotInfos.
+* γR (reclaim flag) is actually 1D, for each ptr id (the slot component is always ⊤).
+  The only reason it's using 2D ghost is code sharing for RetiredBase.
+* γU (unlink flag) is 1D, for each ptr id (unchanged).
+  This flag is actually necessary (unlink HP where it's redundant): see UnlinkFlags_lookup_false.
 
-Details (read along with epoch consensus digram, PEBR figure 3):
-* invariants
-    0. record epoch unlink history (master-snapshot)
-    1. for each ptr id `i`, unlink flag is true iff it's in the auth unlink history
-        * 1-1. If there's a retired node of `i` with epoch `e`, then `i` is in unlink history at `e`.
-        * 1-2. If `i` is in unlink history at `e`, then unlink flag is true.
-    2. local epoch ≤ global epoch ≤ local epoch + 1
-    3. If global epoch is `e`, then ownership of epoch `e-2` has been collected ("finalized"), i.e. no more pointers can be retired at `e-2`
-    4. If global epoch is `e`, then all tokens for pointers unlinked at `e-3` have been collected
-        * for convenience, start the epoch from `3`, let global epoch be `e+3`
-    5. Mutex
-        * If a pointer `i` is validated, then the slot `s`'s value is `e` such that `i` is not unlinked in `e-1`
-        * If reclamed, then unlinked
-        * Can't be both validated and reclaimed
-    6. Monotonicity of epoch number at each slot.
-* guard activation of slot `s` at epoch `e`
-    1. take a snapshot of **finalized history** (up to `e-2`)
-        * **NOTE**: Guard at `e` can access pointer retired at `e-1`. So don't snapshot epochs ≥ `e-1`
-    2. take all tokens that are not in the snapshot
-    3. take ownership of epoch `e ↪{s} ∅`
-    4. take ownership of slot number so cannot advance.
-* guard deactivation of slot `s` at epoch `e`
-    * give up all the tokens
-        * **NOTE** This includes the token of pointers retired at `e-1`
-    * epoch `e+2` can now finalize
-* pointer protection:
+Invariants
+0.  epoch_history tracks thing retired at each epoch.
+    When global epoch is e:
+    * e-2 is finalized: no more pointers can be retired at that epoch
+    * pointers reclaimed at e-3 are reclaimable
+1.  for each ptr id `i`, unlink flag is true iff it's in the epoch_history
+    * 1-1. If there's a retired node of `i` with epoch `e`, then `i` is in epoch `e`.
+    * 1-2. If `i` is in unlink history at `e`, then unlink flag is true.
+2.  Active epoch of each slot is monotone. γe_nums ghost.
+    When inactive, this ghost is set to global epoch.
+
+Proof summary
+* Guard-Activate (validating the local epoch at e)
+    * take a snapshot of the finalized part (up to `e-2`) of epoch history
+    * take all tokens that are not in the snapshot
+    * set the γV flag and take epoch ownership (retiring at e; advancement from e+1 → e+2)
+* Guard-Protect
     1. BaseManaged of `i` has `{i} ↪[U]{1/2} false`
     2. auth unlink history doesn't contain it (∵ invariant 1)
     3. my history snapshot doesn't contain it (by monotonicity)
     4. I have token for it
-    * note: GPS RCU's reasoning is much more complicated.
-* retire (unlink):
-    1. get BaseManaged `i`, **local epoch** `e` of slot `s`
-    2. set unlink flag
-    3. add `e ↪{s} {i}` to unlink history
-* global epoch advancement `e` → `e+1`:
-    * Finalize epoch `e-1`: take ownership of epoch `e-1` (= learning about pointers retired in `e-1`; no more pointers can be retired at `e-1`)
-        * If slot value is `e`, then it has given up the ownership of `e-1`
-    * Take tokens of pointers retired at `e-2` (the last finalized epoch)
-        * If slot is inactive, can take all tokens for `e-2` (finalize tokens). This maintains invariant 4.
-* reclamation: at local epoch `e`, reclaim pointers retired at local epoch `e-3`
-    1. `e` ≤ global epoch
-    2. by invariant 4, we have all the tokens we need
+* may_advance: check the lower bound of possibly active epoch numbers for each slot.
+* try_advance e → e+1
+    1. observe that the lower bound of all active epoch is at least e (from may_advance)
+    2. If we are the one advancing the epoch,
+       domain should have all ownerships needed to advance epoch
+    3. collect tokens for pointers retired at e-2.
+    4. collect the epoch ownership of e-1.
+       If try_advance has seen active epoch lower bound e, then the guard can't be active at epoch e-1
+       (enforced by keeping mono_nat_auth in GE_minus for active guard).
+* do_reclamation just takes already collected tokens
 *)
 
-(* NOTE: When advancing e → e+1, take ownership of epoch e-1. *)
-
+(* Ghosts for finalized epochs 0..=(ge-2) *)
 Definition GE_minus_2_et_al γV γeh ge slist : iProp :=
   (* NOTE: We will throw away [γV] for ({[1]}, ⊤) *)
   (sids_to (ge-1),sids_from (length slist)) ↦P2[γV] false ∗
@@ -125,6 +122,7 @@ Definition GE_minus_2_et_al γV γeh ge slist : iProp :=
   [∗ list] e ∈ seq 0 (ge-1),
     epoch_history_frag γeh e ⊤.
 
+(* Ghosts for e = ge - 1 and e = ge. *)
 Definition GE_minus γV γeh γe_nums e slist sbvmap : iProp :=
   ({[sid e]},sids_from (length slist)) ↦P2[γV] false ∗
   epoch_history_frag γeh e (sids_from' (length slist)) ∗
@@ -136,6 +134,34 @@ Definition GE_minus γV γeh γe_nums e slist sbvmap : iProp :=
     | true => mono_nats_auth γe_nums {[sid si]} (1/2) e
     | false => epoch_history_frag γeh e {[sid si]}
     end.
+(*
+  (* non-allocated slots *)
+  ({[ge]},  sids_from (length slist)) ↦P2[γV] false ∗
+  ({[ge+1]},sids_from (length slist)) ↦P2[γV] false ∗
+  epoch_history_frag γeh (ge-1) (sids_from' (length slist)) ∗
+  epoch_history_frag γeh ge     (sids_from' (length slist)) ∗
+  (* active slots *)
+  [∗ list] si ↦ slot ∈ slist, ∃ (b : bool) v (V_1 V_0 : bool),
+    ⌜ sbvmap !! slot = Some (b, v) ⌝ ∗
+    (sid (ge-1), sid si) ↦p2[γV]{ 1/2 } V_1 ∗
+    (sid ge,     sid si) ↦p2[γV]{ 1/2 } V_0 ∗
+    match V_1, V_0 with
+    | false, false => (* not active *)
+        epoch_history_frag γeh (ge-1) {[sid si]} ∗
+        epoch_history_frag γeh ge     {[sid si]}
+    | true, false => (* at epoch ge-1 *)
+        ⌜ b = true ∧ v = Some (ge-1) ⌝ ∗
+        (* this guard blocks ge → ge+1 *)
+        mono_nats_auth γe_nums {[sid si]} (1/2) (ge-1) ∗
+        epoch_history_frag γeh ge {[sid si]}
+    | false, true => (* at epoch ge *)
+        ⌜ b = true ∧ v = Some ge ⌝ ∗
+        (* This guard blocks ge+1 → ge+2 *)
+        epoch_history_frag γeh (ge-1) {[sid si]} ∗
+        mono_nats_auth γe_nums {[sid si]} (1/2) ge
+    | true, true => False
+    end
+*)
 
 Definition GhostEpochInformations γV γeh γe_nums ge slist sbvmap : iProp :=
   GE_minus_2_et_al γV γeh ge slist ∗
@@ -148,14 +174,7 @@ Definition GhostEpochInformations γV γeh γe_nums ge slist sbvmap : iProp :=
 
 Global Instance ghost_epoch_informations_timeless γV γeh γe_nums ge slist sbvmap :
   Timeless (GhostEpochInformations γV γeh γe_nums ge slist sbvmap).
-Proof.
-  repeat (
-    intros ||
-    apply bi.sep_timeless || apply bi.exist_timeless ||
-    apply big_sepM_timeless || apply big_sepL_timeless ||
-    apply _ || case_match
-  ).
-Qed.
+Proof. apply _. Qed.
 
 (* NOTE: Suppose we want to advance [ge] → [ge+1]. If a guard was at epoch
 [ge], then it's epoch will never decrease. So we can take [frag]s at once when
@@ -180,6 +199,7 @@ Definition SlotInfos γV γtok γeh γe_nums slist sbvmap ehist (ge := length eh
     match sbvmap !! slot with
     | Some (false, _) =>
       toks γtok (⊤ ∖ reclaimable) {[sid si]} ∗
+      (* extra 1/2/2 for non-existent guard *)
       (⊤,{[sid si]}) ↦P2[γV]{ 1/2 } false ∗
       mono_nats_auth γe_nums {[sid si]} 1 ge
     | Some (true, None) =>
@@ -203,22 +223,18 @@ Definition SlotInfos γV γtok γeh γe_nums slist sbvmap ehist (ge := length eh
 
 Global Instance slot_infos_timeless γV γtok γeh γe_nums slist sbvmap ge:
   Timeless (SlotInfos γV γtok γeh γe_nums slist sbvmap ge).
-Proof.
-  repeat (
-    intros ||
-    apply bi.sep_timeless || apply bi.exist_timeless ||
-    apply big_sepM_timeless || apply big_sepL_timeless ||
-    apply _ || case_match
-  ).
-Qed.
+Proof. apply _. Qed.
 
 Definition ReclaimInfo γR γtok ehist info (ge := length ehist - 1): iProp :=
   ∃ reclaimed,
+  (* 0..=(ge-3) *)
   let reclaimable := gset_to_coPset (fold_hist (take (ge - 2) ehist)) in
   (gset_to_coPset reclaimed,⊤) ↦P2[γR]{ 1/2 } true ∗
   (gset_to_coPset (dom info ∖ reclaimed),⊤) ↦P2[γR]{ 1/2 } false ∗
   (⊤ ∖ gset_to_coPset (dom info),⊤) ↦P2[γR] false ∗
-  toks γtok (reclaimable ∖ (gset_to_coPset reclaimed)) ⊤.
+  toks γtok (reclaimable ∖ (gset_to_coPset reclaimed)) ⊤
+  (* ⌜ reclaimed ⊆ reclaimable ⌝ *)
+  .
 
 Definition BaseManaged γe (p : blk) (i_p : gname) (size_i : nat) R : iProp :=
   ∃ γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums (d : loc),
@@ -230,7 +246,11 @@ Definition BaseNodeInfo γe (p : blk) (i_p : positive) (size_i : nat) R : iProp 
     ⌜γe = encode (γsb, γtok, γinfo, γptrs, γeh, γrs, γU, γV, γR, γe_nums, d)⌝ ∗
     NodeInfoBase mgmtN ptrsN γtok γinfo γptrs p i_p size_i R.
 
-Global Instance BaseNodeInfo_persistent γe p i_p size_p R : Persistent (BaseNodeInfo γe p i_p size_p R).
+(* Note: A persistent instance with a lot of evars may cause search for other such instances to become very slow due to a mismatch.
+  For example, [BaseNodeInfo_persistent] instance will cause the search for [IsEBRDomain_persistent] to be very slow.
+  Solution is to seal it or increse the cost for instances with lots of evars.
+*)
+Global Instance BaseNodeInfo_persistent γe p i_p size_p R : Persistent (BaseNodeInfo γe p i_p size_p R) | 2.
 Proof. apply _. Qed.
 Global Instance BaseNodeInfo_contractive γe p i_p size_p :
   Contractive (λ (R : blk -d> list val -d> gname -d> iPropO Σ), BaseNodeInfo γe p i_p size_p R).
@@ -265,7 +285,7 @@ Definition EBRAuth γe info_a retired : iProp :=
     ghost_var γrs (1/2) retired ∗
     ⌜info_a = fst <$> info⌝.
 
-Global Instance EBRAuth_timeless γe info_a retired : Timeless (EBRAuth γe info_a retired).
+Global Instance EBRAuth_timeless γe info_a retired : Timeless (EBRAuth γe info_a retired) | 2.
 Proof. apply _. Qed.
 
 Definition EBRDomain γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums (d lBag rList : loc) : iProp :=
@@ -276,11 +296,10 @@ Definition EBRDomain γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums (d 
     epoch_history_auth γeh ehist ∗
     ghost_var γrs (1/2) retired ∗
 
-    (* NOTE: need Invariant 2? *)
     sbs.(SlotBag) γsb lBag sbvmap slist ∗
     rls.(RetiredList) rList rL ∗
 
-    (* NOTE: we have monotonicity of global epoch by mono_list *)
+    (* Monotonicity of global epoch follows from monotonicity of epoch_history *)
     let ge := length ehist - 1 in
 
     GhostEpochInformations γV γeh γe_nums ge slist sbvmap ∗
@@ -295,17 +314,17 @@ Definition EBRDomain γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums (d 
       ⌜info !! i = Some info_i⌝ ∗
       (* Permission for freeing the pointer with this length.
       This is used for proving [rcu_domain_register]. *)
-      †(blk_to_loc p)…info_i.1.(len)) ∗
+      †(Loc.blk_to_loc p)…info_i.1.(len)) ∗
 
     ReclaimInfo γR γtok ehist info ∗
 
-    ([∗ list] rle ∈ rL, let '(r,len,epoch) := rle in ∃ i R unlinked_e,
+    ([∗ list] '(r,len,epoch) ∈ rL, ∃ i R unlinked_e,
       RetiredBase mgmtN ptrsN γtok γinfo γptrs γU γR r i len R ∗
-      (* Invariant 1-1 *)
       epoch_history_snap γeh epoch unlinked_e ∗
       ⌜ i ∈ unlinked_e ⌝) ∗
 
     ⌜∀ p i, ptrs !! p = Some i → ∃ z, info !! i = Some z ∧ z.1.(addr) = p ⌝ ∗
+    (* if a created id is not finalized, then its ptr is live with that id *)
     ⌜∀ i p, i ∉ fold_hist (take (ge - 2) ehist) → (∃ z, info !! i = Some z ∧ z.1.(addr) = p) → ptrs !! p = Some i ⌝
   .
 
@@ -318,8 +337,8 @@ Definition IsEBRDomain γe (d : loc) : iProp :=
     (d +ₗ domRSet) ↦□ #rList ∗
     inv ebrInvN (EBRDomain γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums d lBag rList).
 
-Global Instance IsEBRDomain_Persistent γe d : Persistent (IsEBRDomain γe d).
-Proof. repeat (apply bi.exist_persistent; intros). apply _. Qed.
+Global Instance IsEBRDomain_Persistent γe d : Persistent (IsEBRDomain γe d) | 2.
+Proof. apply _. Qed.
 
 Definition BaseInactive γe (g : loc) : iProp :=
   ∃ γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums
@@ -329,7 +348,6 @@ Definition BaseInactive γe (g : loc) : iProp :=
     (g +ₗ guardDom) ↦ #d ∗
     †g…guardSize ∗
     sbs.(Slot) γsb slot idx v ∗
-    (* corresponds to Shield's Deactivated and NotValidated *)
     (⊤,{[sid idx]}) ↦P2[γV]{ 1/2/2 } false.
 
 Definition BaseGuard γe γg (g : loc) Syn G : iProp :=
@@ -369,7 +387,7 @@ Lemma do_unprotect E γtok γinfo γptrs γg idx G :
     toks γtok (gset_to_coPset (range G)) {[sid idx]}.
 Proof.
   iIntros (?) "Prot".
-  iInduction (G) as [|p i_p G FRESH_l] "IH" using map_ind.
+  iInduction (G) as [|p i_p G FRESH_l IH] using map_ind.
   { rewrite range_empty gset_to_coPset_empty. iApply token2_get_empty_1. }
 
   iDestruct (big_sepM_delete _ _ p  with "Prot") as "[[#p P] Prot]"; [apply lookup_insert|simpl].
@@ -511,7 +529,7 @@ Proof.
   iIntros (LE3 Fresh) "EInfo".
   iDestruct "EInfo" as "(GE_2_et_al & GE_1 & GE_0 & #slist & γV_to & γV_from)".
   unfold GhostEpochInformations.
-  rewrite !app_length !Nat.add_1_r.
+  rewrite !length_app !Nat.add_1_r.
   iEval (rewrite (sids_from_S (length slist))) in "γV_from".
   iEval (rewrite -(sids_to_sids_from_union (S ge))).
   rewrite -ghost_vars2_union_2; [|apply sids_from_sid_disjoint; lia].
@@ -524,7 +542,7 @@ Proof.
     ∗ (sids_to (ge -1),{[sid idx]}) ↦P2[γV]{ 1/2 } false)%I
     with "[GE_2_et_al]" as "[$ γV_2_et_al]".
   { iDestruct "GE_2_et_al" as "(γV_from & γV_to & $)".
-    rewrite !app_length !Nat.add_1_r !(sids_from_S (length slist)).
+    rewrite !length_app !Nat.add_1_r !(sids_from_S (length slist)).
     rewrite -ghost_vars2_union_2; [|apply sids_from_sid_disjoint; lia].
     iDestruct "γV_from" as "[$ [γV $]]".
     iCombine "γV_to γV" as "γV_to".
@@ -538,7 +556,7 @@ Proof.
     as "GE_update".
   { iIntros (e) "GE_minus". unfold GE_minus.
     iDestruct "GE_minus" as "(γV & ◯ehist & slist_info)".
-    rewrite app_length Nat.add_1_r (sids_from_S (length slist)).
+    rewrite length_app Nat.add_1_r (sids_from_S (length slist)).
     rewrite -ghost_vars2_union_2; [|apply sids_from_sid_disjoint; lia].
     iDestruct "γV" as "[$ [γV $]]".
     rewrite (sids_from'_S (length slist)).
@@ -603,7 +621,7 @@ Proof.
     iIntros (i l Hi) "GEi".
     case_decide as EQi; auto.
     iDestruct "GEi" as (bi vi Vi) "(%Hl & ●Vi & %HVi & Ho)".
-    repeat iExists _. iFrame. iPureIntro. split; [|done].
+    iFrame. repeat iExists _. iPureIntro. split; [|done].
     rewrite lookup_insert_ne; auto. intros ->.
     eapply EQi, NoDup_lookup; eauto. }
 
@@ -683,12 +701,12 @@ Proof.
   iSplitR "TEI"; last first.
   { rewrite -union_comm_L -union_difference_L; first done.
     apply prefix_cut in PF. rewrite drop_ge in PF; last first.
-    { rewrite take_length. lia. }
+    { rewrite length_take. lia. }
     rewrite app_nil_r in PF. rewrite -PF.
     apply fold_hist_prefix, take_prefix_le. lia.
   }
   iApply big_sepL_delete; eauto. iFrame.
-  rewrite Hslot. iExists _. iFrame. iExists ehistF. unfold reclaimable, ge.
+  rewrite Hslot. iExists _. iFrame. unfold reclaimable, ge.
   rewrite gset_to_coPset_difference. iFrame. eauto.
 Qed.
 
@@ -797,7 +815,7 @@ Lemma slot_infos_new_slot slot γV γtok γeh γe_nums slist sbvmap ge (idx := l
 Proof.
   iIntros (Fresh) "SInfo [$ γV]".
   iDestruct "SInfo" as "($ & ●γe_nums & ●toks & SInfo)".
-  rewrite (sids_from_S (length slist)) app_length Nat.add_1_r.
+  rewrite (sids_from_S (length slist)) length_app Nat.add_1_r.
   rewrite mono_nats_auth_union; [|apply sids_from_sid_disjoint; lia].
   rewrite -toks_union_2; [|apply sids_from_sid_disjoint; lia].
   iDestruct "●γe_nums" as "[$ ●γe_num]".
@@ -820,7 +838,7 @@ Lemma slot_infos_reactivate_slot slot γV γtok γeh γe_nums slist sbvmap si ge
 Proof.
   iIntros (NoDup Hsi Hslot) "SInfo".
   iDestruct "SInfo" as "($ & $ & $ & SInfo)".
-  iInduction slist as [|slot' slist] "IH" using rev_ind; [done|].
+  iInduction slist as [|slot' slist IH] using rev_ind; [done|].
   rewrite !big_sepL_snoc. iDestruct "SInfo" as "[SInfo slot']".
   destruct (decide (slot' = slot)) as [->|NE].
   { iClear "IH". rewrite -assoc. iSplitL "SInfo".
@@ -838,7 +856,7 @@ Proof.
   assert (si < length slist) as LE.
   { rewrite Nat.lt_nge. intro le. apply NE.
     assert (si = length slist) as ->.
-    { apply lookup_lt_Some in Hsi. rewrite app_length Nat.add_1_r in Hsi. lia. }
+    { apply lookup_lt_Some in Hsi. rewrite length_app Nat.add_1_r in Hsi. lia. }
     rewrite snoc_lookup in Hsi. by injection Hsi. }
   rewrite lookup_app_l in Hsi; [|done].
   iSpecialize ("IH" with "[] [] [SInfo]"); [done..|].
@@ -933,7 +951,7 @@ Proof.
   iDestruct "SInfo" as "(●γe_nums & ◯γe_nusm & toks & SInfo)".
   set reclaimable := gset_to_coPset (fold_hist (take (ge - 2) ehist)).
   unfold SlotInfos.
-  rewrite alter_length.
+  rewrite length_alter.
   set reclaimable' := gset_to_coPset (fold_hist (take (ge - 2) (alter (union {[i]}) e ehist))).
   assert (reclaimable' = reclaimable) as ->; last iFrame.
   unfold reclaimable, reclaimable'. f_equal.
@@ -1023,7 +1041,7 @@ Proof.
   iIntros (e_GE_ge) "Recl".
   iDestruct "Recl" as (reclaimed) "(γR_recl & γR_alive & γR_not_created & toks)".
   unfold ReclaimInfo.
-  iExists reclaimed. rewrite alter_length. iFrame.
+  iExists reclaimed. rewrite length_alter. iFrame.
   rewrite take_alter; [done|lia].
 Qed.
 
@@ -1034,14 +1052,14 @@ Lemma rcu_domain_new_spec :
 Proof.
   intros ?.
   iIntros (Φ) "!> _ IED".
-  wp_lam. wp_alloc d as "d↦" "†d". move: (blk_to_loc d) => {}d.
+  wp_lam. wp_alloc d as "d↦" "†d". move: (Loc.blk_to_loc d) => {}d.
   do 2 rewrite array_cons. rewrite array_singleton.
   iDestruct "d↦" as "(d.b↦ & d.rs↦ & d.e↦)".
 
   wp_let. wp_apply (sbs.(slot_bag_new_spec) with "[//]") as (γsb slotbag) "SB".
-  wp_pures. rewrite loc_add_0. wp_store.
+  wp_pures. rewrite Loc.add_0. wp_store.
   wp_apply (rls.(retired_list_new_spec) with "[//]") as (rList) "RL".
-  wp_store. wp_op. rewrite loc_add_assoc. wp_store.
+  wp_store. wp_op. rewrite Loc.add_assoc. wp_store.
 
   (* alloc other info *)
   iMod (ghost_map_alloc_empty (K:=positive) (V:=alloc*gname)) as (γinfo) "[●γinfo ●γinfo_au]".
@@ -1053,15 +1071,15 @@ Proof.
   remember (encode (γsb, γtok, γinfo, γptrs, γeh, γrs, γU, γV, γR, γe_nums, d)) as γe eqn:Hγe.
   iAssert (EBRDomain _ _ _ _ _ _ _ _ _ _ _ _ _)%I
     with "[SB RL d.e↦ †d ●γinfo ●γrs ●γptrs ehist GEI SI UF Rec]" as "EBR".
-  { repeat iExists _. iFrame "∗#". simpl. rewrite !union_empty_l_L. repeat (iSplit; auto).
+  { iFrame "∗#". simpl. rewrite !union_empty_l_L. repeat (iSplit; auto).
     iPureIntro. intros ???. set_solver.
   }
   iMod (inv_alloc ebrInvN _ (EBRDomain _ _ _ _ _ _ _ _ _ _ _ _ _) with "EBR") as "#EBR_Inv".
-  iMod (mapsto_persist with "d.b↦") as "#d.b↦".
-  iMod (mapsto_persist with "d.rs↦") as "#d.rs↦".
+  iMod (pointsto_persist with "d.b↦") as "#d.b↦".
+  iMod (pointsto_persist with "d.rs↦") as "#d.rs↦".
   iModIntro. iApply "IED".
   iSplitR.
-  all: repeat (iExists _); try rewrite loc_add_0; iFrame (Hγe) "∗#%".
+  all: repeat (iExists _); try rewrite Loc.add_0; iFrame (Hγe) "∗#%".
   by rewrite fmap_empty.
 Qed.
 
@@ -1161,7 +1179,7 @@ Proof.
 
   (* Close invariant *)
   iModIntro. iSplitL "info ptrs ehist ret SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret †p".
-  { iNext. repeat iExists _. iFrame "∗#%". iSplit; [iPureIntro|repeat iSplit].
+  { iNext. iFrame "∗#%". iSplit; [iPureIntro|repeat iSplit].
     - rewrite dom_insert_L. set_solver.
     - rewrite big_sepM_insert; [|done]. iSplitL "†p".
       + iExists _. rewrite lookup_insert. iSplit; done.
@@ -1186,13 +1204,9 @@ Proof.
 
   iModIntro. iExists i. iFrame. iSplit.
   { iPureIntro. apply is_fresh. }
+  iFrame "∗#%".
 
-  iSplitL "ret_au info_au".
-  { repeat iExists _. iFrame "∗%". iPureIntro. by rewrite fmap_insert. }
-
-  (* Make managed *)
-  repeat iExists _. iFrame "∗#%".
-  repeat iExists _. iFrame "∗#%".
+  iPureIntro. by rewrite fmap_insert.
 Qed.
 
 Lemma guard_new_spec :
@@ -1208,7 +1222,7 @@ Proof.
   iInv "IED" as (info ptrs sbvmap slist rL ehist)
       "(>info & >ptrs & >ehist & >ret & >SB & >RL & >EInfo & >SInfo & >γU & >%Hdom_i & >%Hehist & >d.ge↦ & >Reg & >Recl & Ret & >%HInfo & >%HPtrs)".
   iAaccIntro with "SB".
-  { iIntros "SB !>". iFrame. repeat iExists _. by iFrame "∗#%". }
+  { iIntros "SB !>". by iFrame "∗#%". }
   iIntros (slist' slot idx) "(SB & S & %Hslist')".
 
   (* Spec for common parts *)
@@ -1221,9 +1235,8 @@ Proof.
   { iIntros "γV HΦ". wp_alloc g as "g↦" "†g".
     rewrite array_cons array_singleton.
     iDestruct "g↦" as "[g.s↦ g.d↦]". wp_pures.
-    rewrite !loc_add_0. wp_store. wp_op. wp_store.
-    iApply "HΦ". iModIntro. repeat iExists _. rewrite !loc_add_0.
-    iFrame "∗#%".
+    rewrite !Loc.add_0. wp_store. wp_op. wp_store.
+    iApply "HΦ". iModIntro. iFrame "∗#%".
   }
   destruct Hslist' as [[-> [Hm ->]]|[-> [Hm Hl]]].
   - (* New slot added*)
@@ -1233,8 +1246,8 @@ Proof.
 
     iModIntro.
     iSplitL "info ptrs ehist ret SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-    { repeat iExists _. by iFrame "∗#%". }
-    iIntros "_". wp_let.
+    { by iFrame "∗#%". }
+    wp_let.
     wp_apply ("make_guard" with "γV HΦ").
   - (* Slot Reused *)
     (* Update [EInfo] and [SInfo], and get validation flag for slot *)
@@ -1244,8 +1257,8 @@ Proof.
       as "[EInfo γV]"; [done..|].
     iModIntro.
     iSplitL "info ptrs ehist ret SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-    { repeat iExists _. by iFrame "∗#%". }
-    iIntros "_". wp_let.
+    { by iFrame "∗#%". }
+    wp_let.
     wp_apply ("make_guard" with "γV HΦ").
 Qed.
 
@@ -1265,7 +1278,7 @@ Proof.
   wp_load.
 
   iModIntro. iSplitR "g.slot↦ g.dom↦ †g S γV HΦ".
-  { repeat iExists _. by iFrame "∗#%". }
+  { by iFrame "∗#%". }
   move: (length ehist - 1) => e.
   clear dependent info ptrs sbvmap slist rL ehist.
 
@@ -1303,9 +1316,9 @@ Proof.
     iDestruct (ghost_epoch_informations_set idx slot (Some e) true with "EInfo γV") as "[EInfo γV]"; [done..|].
     iDestruct (slot_infos_set with "SInfo γV") as "[SInfo γV]"; [done..|].
     iSplitL "info ptrs ehist ret SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-    { repeat iExists _. iFrame "∗#%". }
+    { iFrame "∗#%". }
     clear dependent info ptrs sbvmap slist rL ehist.
-    iIntros "_ HΦ".
+    iIntros "HΦ".
     wp_pures. wp_bind (!_)%E.
     iInv "IED" as (info ptrs sbvmap slist rL ehist)
       "(>info & >ptrs & >ehist & >ret & >SB & >RL & >EInfo & >SInfo & >γU & >%Hdom_i & >%Hehist & >d.ge↦ & >Reg & >Recl & Ret & >%HInfo & >%HPtrs)".
@@ -1320,27 +1333,27 @@ Proof.
       iDestruct (SlotBag_NoDup with "SB") as %ND.
       iDestruct (SlotBag_lookup with "SB S") as %[Hslist Hsvbmap].
       assert (length ehistF = ge - 1).
-      { unfold ge, ehistF. rewrite take_length. lia. }
+      { unfold ge, ehistF. rewrite length_take. lia. }
       (* Update nessecary [ghost_vars2 γV] by syncing with EInfo. *)
       iMod (ghost_epoch_informations_slot_infos_activate with "EInfo SInfo γV ◯ehist_fin") as "H"; [try done..|].
       iDestruct "H" as "(EInfo & SInfo & γV_not_ge & γV_ge & ◯ehist_ge & ●γe_nums_idx & toks)".
       iModIntro.
       iSplitL "info ptrs ehist ret SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-      { repeat iExists _. iFrame "∗#%". }
+      { iFrame "∗#%". }
       clear dependent info ptrs sbvmap slist rL.
-      wp_pures. rewrite bool_decide_eq_true_2; [|done]. wp_pures.
+      wp_pures.
       iApply "HΦ". iModIntro. iFrame "S". iFrame "∗#%".
     - (* Validation fails. Do induction *)
       iModIntro. iSplitL "info ptrs ehist ret SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-      { repeat iExists _. iFrame "∗%#". }
-      wp_pures. rewrite bool_decide_eq_false_2; [|injection as ?;lia].
+      { iFrame "∗%#". }
+      wp_pures. rewrite bool_decide_eq_false_2; [|lia].
       wp_if. iApply ("IH" with "S γV HΦ").
   }
   iMod ghost_map_alloc_empty as (γg) "I".
   wp_apply ("activate_loop" with "[$S $γV]")
     as (ge ehistF) "(S & ehist & % & #◯ehistF & γV_true & γV_false & toks & ◯γe_nums)".
-  iApply "HΦ". repeat iExists _. iFrame "∗#%".
-  iExists ge, ehistF. rewrite range_empty gset_to_coPset_empty difference_empty_L big_sepM_empty.
+  iApply "HΦ". iFrame "∗#%".
+  rewrite range_empty gset_to_coPset_empty difference_empty_L big_sepM_empty.
   iFrame "∗#%". done.
 Qed.
 
@@ -1366,10 +1379,9 @@ Proof.
 Qed.
 
 (* 1. BaseManaged of `i` has `{i} ↪[U]{1/2} false`
-    2. auth unlink history doesn't contain it (∵ invariant 1)
-    3. my history snapshot doesn't contain it (by monotonicity)
-    4. I have token for it
-    * note: GPS RCU's reasoning is much more complicated. *)
+   2. auth unlink history doesn't contain it (∵ invariant 1)
+   3. my history snapshot doesn't contain it (by monotonicity)
+   4. I have token for it *)
 Lemma guard_protect :
   guard_protect' mgmtN ptrsN IsEBRDomain BaseManaged BaseGuard.
 Proof.
@@ -1391,11 +1403,11 @@ Proof.
     rewrite insert_id; [|done].
     iDestruct (ghost_map_elem_agree with "◯info_i ◯info_i'") as %[= <- <-].
     iSplitL "Gcinv γp_i γU_i γR_i".
-    { repeat iExists _. iFrame (Hγe) "∗#". iExists _. iFrame "∗#". }
+    { iFrame (Hγe) "∗#". }
     iSplitL; [|iSplit;[|done]].
-    - repeat iExists _. iFrame (Hγe) "∗#".
-      repeat iExists _. iFrame. repeat (iSplitR; [done|]).
-      iApply "Prot". iFrame "#". iExists _,_. iFrame "∗#".
+    - iFrame (Hγe) "∗#".
+      repeat (iSplitR; [done|]).
+      iApply "Prot". iFrame "∗#".
     - iPureIntro. assert (i_p ∈ range G); [|set_solver].
       apply range_correct. eauto.
   }
@@ -1459,17 +1471,16 @@ Proof.
   iMod (exchange_stok_give with "Ex toks_i") as "[zc cinv]"; [solve_ndisj|].
 
   iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-  { repeat iExists _. iFrame "∗#%". }
+  { iFrame "∗#%". }
   iModIntro. iSplitL "Gcinv γp_i γU_i γR_i".
-  { repeat iExists _. iFrame (Hγe) "∗#". repeat iExists _. by iFrame "∗#". }
+  { iFrame (Hγe) "∗#". }
 
   iSplitL.
-  - repeat iExists _. iFrame (Hγe) "∗#".
-    repeat iExists _. iFrame. repeat (iSplitR; [done|]).
+  - iFrame (Hγe) "∗#".
+    repeat (iSplitR; [done|]).
     subst G_new. iSplit; [iPureIntro|].
     + rewrite range_insert // disjoint_union_l. set_solver.
-    + rewrite big_sepM_insert //. iFrame. repeat iExists _. iFrame "∗#%".
-      repeat iExists _. iFrame "∗#".
+    + rewrite big_sepM_insert //. iFrame. iFrame "∗#%".
   - iPureIntro. split; [done|]. by inversion 1.
 Qed.
 
@@ -1504,7 +1515,7 @@ Proof.
     { apply HPtrs; last first.
       { eexists. split; [exact Hi|]; auto. }
       assert (ge ≥ e) as GE.
-      { apply prefix_length in PF. rewrite take_length in PF. lia. }
+      { apply prefix_length in PF. rewrite length_take in PF. lia. }
       rewrite prefix_cut (_ : length ehist - 2  = ge - 1) in PF; [|lia].
       apply (f_equal (take (ge - 2))) in PF.
       rewrite take_take Nat.min_l in PF; [|lia].
@@ -1521,13 +1532,12 @@ Proof.
     rewrite insert_id; [|done].
 
     iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-    { repeat iExists _. by iFrame "∗#". }
+    { by iFrame "∗#". }
     iModIntro. iSplitL; [|iSplit;[|done]].
-    - repeat iExists _. iFrame (Hγe) "∗#".
-      repeat iExists _. iFrame. repeat (iSplitR; [done|]).
-      iApply "Prot". iFrame "#". iExists _,_. iFrame "∗#".
-    - iFrame "p". repeat iExists _. iFrame "∗%#".
-      repeat iExists _. iFrame "∗#".
+    - iFrame (Hγe) "∗#".
+      repeat (iSplit; [done|]).
+      iApply "Prot". iFrame "∗#".
+    - iFrame "p". iFrame "∗%#".
   }
 
   (* Get that i_p ∉ range G. *)
@@ -1577,14 +1587,12 @@ Proof.
   iMod (exchange_stok_give with "Ex toks_i") as "[zc cinv]"; [solve_ndisj|].
 
   iModIntro. iSplitL; [|iSplit].
-    - repeat iExists _. iFrame (Hγe) "∗#".
-      repeat iExists _. iFrame. repeat (iSplitR; [done|]).
+    - iFrame (Hγe) "∗#".
+      repeat (iSplit; [done|]).
       subst G_new. iSplit; [iPureIntro|].
     + rewrite range_insert // disjoint_union_l. set_solver.
-    + rewrite big_sepM_insert //. iFrame. repeat iExists _. iFrame "∗#%".
-      repeat iExists _. iFrame "∗#".
-  - iFrame "p". repeat iExists _. iFrame "∗%#".
-    repeat iExists _. iFrame "∗#".
+    + rewrite big_sepM_insert //. iFrame "∗#%".
+  - iFrame "∗%#".
   - iPureIntro. by inversion 1.
 Qed.
 
@@ -1608,12 +1616,11 @@ Proof.
   iDestruct (epoch_history_prefix with "ehist ◯ehist_fin") as %HPF.
   apply fold_hist_prefix in HPF.
   iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-  { repeat iExists _. by iFrame "∗#%". }
+  { by iFrame "∗#%". }
   iModIntro. iSplitL "info_au ret_au".
-  { repeat iExists _. by iFrame "∗#%". }
+  { by iFrame "∗#%". }
   iSplitL; [|done].
-  repeat iExists _. iFrame (Hγe) "∗#%".
-  repeat iExists _. iFrame "∗#%". done.
+  iFrame (Hγe) "∗#%". done.
 Qed.
 
 Lemma guard_acc :
@@ -1636,17 +1643,17 @@ Proof.
   iInv "RCI" as "[R γc_i]" "Close1".
 
   iDestruct ("Prot" with "[γp_i γc_i $p]") as "Prot".
-  { repeat iExists _. iFrame "∗#". }
+  { iFrame "∗#". }
 
   iDestruct "R" as (?) "(><- & R & >p↦)".
   iApply fupd_mask_intro; [solve_ndisj|]. iIntros "Close2".
   iExists vl. iFrame "p↦ R". iSplit; [done|].
   iSplitR "Close1 Close2".
-  { repeat iExists _. iFrame "∗#%". repeat iExists _. iFrame "∗#%". done. }
+  { iFrame "∗#%". done. }
 
   iIntros (vl') "(%Hvl' & p↦ & R)".
   iMod "Close2".
-  iMod ("Close1" with "[p↦ R]"). { repeat iExists _. iFrame "∗#%". iPureIntro. lia. }
+  iMod ("Close1" with "[p↦ R]"). { iFrame "∗#%". iPureIntro. lia. }
   done.
 Qed.
 
@@ -1666,7 +1673,7 @@ Proof.
 
   iIntros (vl') "(%Hvl' & p↦ & R)".
   iMod "Close2".
-  iMod ("Close1" with "[p↦ R]"). { repeat iExists _. iFrame "∗#%". iPureIntro. lia. }
+  iMod ("Close1" with "[p↦ R]"). { iFrame "∗#%". iPureIntro. lia. }
   done.
 Qed.
 
@@ -1678,13 +1685,7 @@ Proof.
   iDestruct "M" as (??????????) "(% & %Hγe & M)".
   iDestruct "M'" as (??????????) "(% & % & M')".
   encode_agree Hγe.
-  iDestruct "M" as (γc_i) "(cinv & i↪ & pc & Ex & CInv & U & γR)".
-  iDestruct "M'" as (γc_i') "(cinv' & i'↪ & pc' & Ex' & CInv' & U' & γR')".
-  iDestruct (coP_ghost_map_elem_agree with "pc' pc") as %->.
-  iDestruct (ghost_map_elem_agree with "i'↪ i↪") as %[= -> ->].
-  iDestruct (coP_cinv_own_valid with "cinv' cinv") as %DISJ.
-  iPureIntro. rewrite coPneset_disj_iff /= in DISJ.
-  set_solver.
+  iApply (managed_base_exclusive with "M M'").
 Qed.
 
 Lemma managed_get_node_info :
@@ -1693,7 +1694,7 @@ Proof.
   intros ?????.
   iDestruct 1 as (??????????) "(% & %Hγe & M)".
   iDestruct "M" as (γc_i) "(cinv & #i↪ & pc & #Ex & #CInv & U & γR)".
-  repeat iExists _. iFrame (Hγe). iExists γc_i. iFrame "#".
+  iFrame (Hγe). iExists γc_i. iFrame "#".
 Qed.
 
 Lemma guard_deactivate_spec :
@@ -1740,9 +1741,8 @@ Proof.
 
   iModIntro.
   iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-  { iNext. repeat iExists _. iFrame "EInfo ∗#%". }
-  iApply "HΦ".
-  repeat iExists _. by iFrame.
+  { iNext. iFrame "EInfo ∗#%". }
+  iApply "HΦ". iFrame (Hγe) "∗#%".
 Qed.
 
 Lemma slot_guard_drop γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums idx (d lBag rList slot g : loc) E :
@@ -1762,15 +1762,15 @@ Proof.
   iInv "IED" as (info ptrs sbvmap slist rL ehist)
     "(>info & >ptrs & >ehist & >ret & >SB & >RL & >EInfo & >SInfo & >γU & >%Hdom_i & >%Hehist & >d.ge↦ & >Reg & >Recl & Ret & >%HInfo & >%HPtrs)".
   iAaccIntro with "SB".
-  { iFrame. iIntros "SB". iModIntro. iNext. repeat iExists _. iFrame "∗#%". }
+  { iFrame. iIntros "SB". iModIntro. iNext. iFrame "∗#%". }
   iIntros "(%Hslot & SB)". destruct Hslot. iModIntro.
   iDestruct (SlotBag_NoDup with "SB") as %NoDup.
   iDestruct (ghost_epoch_informations_set with "EInfo ●Sh") as "[EInfo ●Sh]"; eauto.
   iDestruct (slot_infos_unset with "SInfo ●Sh") as "SInfo"; eauto.
   iSplitR "g.slot↦ g.dom↦ †g".
-  { iNext. repeat iExists _. iFrame "∗#%". }
-  iIntros "_ HΦ". wp_seq. iCombine "g.slot↦ g.dom↦" as "g↦".
-  iEval (rewrite loc_add_0 -!array_singleton -array_app /=) in "g↦".
+  { iNext. iFrame "∗#%". }
+  iIntros "HΦ". wp_seq. iCombine "g.slot↦ g.dom↦" as "g↦".
+  iEval (rewrite Loc.add_0 -!array_singleton -array_app /=) in "g↦".
   wp_free; [done|]. by iApply "HΦ".
 Qed.
 
@@ -1820,7 +1820,7 @@ Proof.
 
   iModIntro.
   iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-  { repeat iExists _. iFrame "EInfo ∗#%". }
+  { iFrame "EInfo ∗#%". }
   wp_seq. wp_apply (slot_guard_drop with "[$IED $S $●VTI $g.slot↦ $g.dom↦ $†g]"); [solve_ndisj|].
   done.
 Qed.
@@ -1850,7 +1850,7 @@ Proof.
 
   iModIntro.
   iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-  { repeat iExists _. iFrame "EInfo ∗#%". }
+  { iFrame "EInfo ∗#%". }
   wp_seq. wp_apply (slot_guard_drop with "[$IED $S $Act_st $g.slot↦ $g.dom↦ $†g]"); [solve_ndisj|].
   done.
 Qed.
@@ -1877,7 +1877,7 @@ Proof.
   wp_apply (sbs.(slot_read_value_spec) with "[] [$SB]") as (b v') "[%Hsvbmap' SB]"; [by simplify_list_eq|].
   rewrite Hsvbmap in Hsvbmap'. injection Hsvbmap' as [= <- <-].
   iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-  { repeat iExists _. by iFrame "∗#%". }
+  { by iFrame "∗#%". }
   clear dependent info ptrs sbvmap slist rL ehist.
   wp_let.
   wp_apply (rls.(retired_node_new_spec) with "[//]") as (rNode) "RNode".
@@ -1888,7 +1888,7 @@ Proof.
       "(>info & >ptrs & >ehist & >ret & >SB & >RL & >EInfo & >SInfo & >γU & >%Hdom_i & >%Hehist & >d.ge↦ & >Reg & >Recl & Ret & >%HInfo & >%HPtrs)".
   iAaccIntro with "RL"; iIntros "RL".
   { iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-    { repeat iExists _. iFrame "∗#%". }
+    { iFrame "∗#%". }
     iFrame "∗#%".
   }
   iDestruct (epoch_history_frag_lookup with "ehist F") as %He.
@@ -1904,7 +1904,7 @@ Proof.
   iMod (epoch_history_snapshot_get e with "ehist") as "[ehist #◯e_snap]".
   { rewrite list_lookup_alter. rewrite He fmap_Some. eauto. }
   assert (length ehist = length (alter (union {[i_p]}) e ehist)) as ->.
-  { by rewrite alter_length. }
+  { by rewrite length_alter. }
   (* Update [γU]. In particular, change [γU_i] to true. *)
   (* First lookup [infos] *)
   iAssert(|={E ∖ ∅ ∖ ↑ebrInvN}=> UnlinkFlags γU info (alter (union {[i_p]}) e ehist) ∗ i_p ↦p[γU]{1/2} true)%I with "[γU γU_i]" as ">[γU γU_i]".
@@ -1957,7 +1957,7 @@ Proof.
   rewrite Hinfo_au.
   iMod (ghost_var_update_halves (fold_hist (alter (union {[i_p]}) e ehist)) with "ret_au ret") as "[ret_au ret]".
   iMod ("Commit" with "[info_au ret_au]") as "HΦ".
-  { repeat iExists _. iFrame (Hγe) "∗#%". iSplit; [|done].
+  { iFrame (Hγe) "∗#%". iSplit; [|done].
     assert (fold_hist (alter (union {[i_p]}) e ehist) = {[i_p]} ∪ fold_hist ehist) as ->; [|done].
     rewrite (list_alter_insert _ _ _ unlinked_G); [|done].
     rewrite insert_take_drop; [|lia].
@@ -1970,22 +1970,19 @@ Proof.
 
   iModIntro.
   iSplitL "info ptrs ehist ret SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret Gcinv γp_i γU_i γR_i"; last first.
-  { iIntros "_". wp_pures.
+  { wp_pures.
     iAssert (BaseGuard _ _ _ _ ∅) with "[g.slot↦ g.dom↦ †g S ●M ●VeI ●VTxI Fin I T ◯ehist Prot]" as "G".
-    { repeat iExists _. iFrame (Hγe) "∗#%".
-      repeat iExists _. iFrame "∗#%". done.
-    }
-    wp_apply (guard_drop_spec with "[] G"); [solve_ndisj|..].
-    { repeat iExists _. iFrame (Hγe) "#%". }
+    { iFrame (Hγe) "∗#%". done. }
+    wp_apply (guard_drop_spec with "[] G") as "_"; [solve_ndisj|..].
+    { iFrame (Hγe) "#%". }
     iApply "HΦ".
   }
   (* Update [Rec] *)
   iDestruct (recl_infos_retire with "Recl") as "Recl"; [done|].
   iNext.
-  iExists _,_,_,_,((p,_,e)::rL),_.
-  iFrame "ehist ∗#%".
-  iSplit.
-  { iPureIntro. rewrite elem_of_subseteq. rewrite elem_of_subseteq in Hdom_i.
+  iFrame "ehist RL ∗#%".
+  iPureIntro. split_and!.
+  - rewrite elem_of_subseteq. rewrite elem_of_subseteq in Hdom_i.
     intros i' ElemOf. destruct (decide (i' = i_p)) as [->|NE].
     { rewrite elem_of_dom. eauto. }
     apply (Hdom_i i').
@@ -1997,16 +1994,9 @@ Proof.
     rewrite list_lookup_alter He fmap_Some in Hehist2.
     destruct Hehist2 as (unlinked_e' & Hu_G & Hunion ).
     injection Hu_G as [= <-]. subst. set_solver.
-  }
-  iSplit.
-  { iPureIntro. rewrite alter_length. lia. }
-  iSplit.
-  { iExists i_p, _, _. iFrame "◯e_snap". iSplit.
-    { repeat iExists _. iFrame "∗#". }
-    iPureIntro. set_solver.
-  }
-  iPureIntro.
-  by rewrite alter_length take_alter; [|lia].
+  - rewrite length_alter. lia.
+  - set_solver.
+  - by rewrite length_alter take_alter; [|lia].
 Qed.
 
 Lemma may_advance_spec γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums (d lBag rList : loc) unlinked_e (e : nat) E :
@@ -2034,8 +2024,7 @@ Proof.
   iDestruct ((mono_nats_lb_le e) with "◯γe_nums_from") as "◯γe_nums_from_e"; [done|].
   iDestruct ((mono_nats_lb_le (e-1)) with "◯γe_nums") as "◯γe_nums_e"; [lia|].
   iClear "◯γe_nums_from ◯γe_nums".
-  iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-  { repeat iExists _. iFrame "∗#%". }
+  iModIntro. iFrame "∗#%".
   clear dependent info ptrs sbvmap rL ehist unlinked_auth.
   wp_let.
 
@@ -2054,7 +2043,7 @@ Proof.
 
   clear Φ.
   iIntros (rem Hrem Φ) "!> #◯γe_nums_from_rem HΦ".
-  iInduction rem as [|rem'] "IH".
+  iInduction rem as [|rem' IH].
   { simpl. wp_lam. wp_pures. rewrite sids_range_0_sids_to.
     iCombine "◯γe_nums_from_rem ◯γe_nums_from_e" as "◯γe_nums".
     rewrite -mono_nats_lb_union; [|apply sids_to_sids_from_disjoint].
@@ -2091,8 +2080,7 @@ Proof.
     have {}Hrem'2 : slist2 !! rem' = Some slot.
     { eapply prefix_lookup_Some; [apply Hrem'|done]. }
     wp_apply (sbs.(slot_read_next_spec) $! _ _ _ _ _ _ _ Hrem'2 with "SB") as "SB".
-    iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-    { repeat iExists _. iFrame "∗#%". }
+    iModIntro. iFrame "∗#%".
 
     (* Finish induction *)
     wp_let.
@@ -2100,6 +2088,7 @@ Proof.
     iSpecialize ("IH" with "[%]"); first lia.
     wp_apply ("IH" with "◯γe_nums HΦ").
   }
+  iClear "IH".
 
   wp_lam. wp_pures.
 
@@ -2120,14 +2109,12 @@ Proof.
     apply lookup_lt_Some in Hehist.
     assert (e ≤ ge1) as HLEe_ge1 by lia.
     iDestruct ((slot_infos_get_inactive_lb slot) with "SInfo") as "#◯γe_nums_slot"; [done..|].
-    iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-    { repeat iExists _. iFrame "∗#%". }
+    iModIntro. iFrame "∗#%".
     wp_pures.
     iApply ("continue" $! ge1 HLEe_ge1 with "◯γe_nums_slot HΦ").
   }
   (* Slot is active, close invariant. *)
-  iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-  { repeat iExists _. iFrame "∗#%". }
+  iModIntro. iFrame "∗#%".
   wp_pures.
   clear dependent info ptrs sbvmap slist2 rL ehist.
 
@@ -2147,11 +2134,10 @@ Proof.
   assert (e ≤ ge) as HLEe_ge2 by lia.
 
   destruct oe as [e'|]; last first.
-  { (* Not validated slot, get lb of ge from slot list *)
+  { (* Guard is not in critical section. Get lb of ge from slot list *)
     iDestruct ((slot_infos_get_not_validated_lb slot) with "SInfo") as "#◯γe_nums_slot"; [done..|].
 
-    iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-    { repeat iExists _. iFrame "∗#%". }
+    iModIntro. iFrame "∗#%".
     wp_pures.
     iApply ("continue" $! ge HLEe_ge2 with "◯γe_nums_slot HΦ").
   }
@@ -2159,8 +2145,7 @@ Proof.
   (* Possibly validated slot, case analysis on value. *)
   destruct (decide (e' = e)) as [->|NE]; last first.
   { (* Slot is not equal, return false. *)
-    iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-    { repeat iExists _. iFrame "∗#%". }
+    iModIntro. iFrame "∗#%".
     wp_pures.
     case_bool_decide; last lia.
     wp_pures.
@@ -2169,12 +2154,9 @@ Proof.
   }
   (* Slot value is equal. Get LB on slot value. *)
   iDestruct ((slot_infos_get_possibly_validated_lb slot) with "SInfo") as "#◯γe_nums_slot"; [done..|].
-  iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-  { repeat iExists _. iFrame "∗#%". }
+  iModIntro. iFrame "∗#%".
   wp_pures.
   case_bool_decide; last lia.
-  wp_pures.
-  rewrite bool_decide_eq_true_2; last done.
   wp_pures.
   by iApply ("continue" with "[] [$◯γe_nums_slot] [$HΦ]").
 Qed.
@@ -2182,8 +2164,7 @@ Qed.
 Lemma try_advance_spec γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums (d lBag rList : loc) E  :
   ↑(to_baseN mgmtN) ⊆ E →
   {{{ (d +ₗ domLBag) ↦□ #lBag ∗ (d +ₗ domRSet) ↦□ #rList ∗
-    inv ebrInvN (EBRDomain γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums d lBag
-     rList) }}}
+    inv ebrInvN (EBRDomain γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums d lBag rList) }}}
     try_advance #d @ E
   {{{ (ge : nat) unlinked, RET #ge; epoch_history_snap γeh ge unlinked }}}.
 Proof.
@@ -2198,7 +2179,7 @@ Proof.
   iMod (epoch_history_snapshot_get ge with "ehist") as "[ehist #◯ehist]"; [done|].
   wp_load.
   iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-  { repeat iExists _. iFrame "∗#%". }
+  { iFrame "∗#%". }
   clear dependent info ptrs sbvmap slist rL.
   wp_pures. wp_load. wp_let.
   wp_apply (may_advance_spec with "[$IED $◯ehist]") as (b) "#◯γe_nums_ge"; [done..|].
@@ -2217,34 +2198,39 @@ Proof.
     wp_cmpxchg_suc.
     (** Update resources. *)
 
-    (* Get the unlinked history *)
+    (* u_ge is the pointers that becomes reclaimable after advancing *)
     have [u_ge Hu_ge] : is_Some (ehist' !! (ge - 2)).
     { apply lookup_lt_is_Some_2. lia. }
-    set ehistF := take (ge - 2) ehist'.
-    set finalized := fold_hist ehistF.
+    set ehistR := take (ge - 2) ehist'. (* up to ge-3 *)
+    (* Things that were already reclaimable. *)
+    set old_reclaimable := fold_hist ehistR.
+    (* [u_ge ## old_reclaimable] should hold. But we're not using that fact,
+      because it requires additional work to maintain that.
+      Things like [u_ge ∖ old_reclaimable] (which should equal u_ge)
+      is a hack to avoid doing that work. *)
 
     (* Common facts relating history *)
     assert (take (ge + 1 - 2) ehist' = take (ge - 2) ehist' ++ [u_ge]) as HistDiff.
     { apply list_eq. intros i. destruct (decide (i < ge - 2)) as [LT|GE].
-      - rewrite lookup_app_l; [|rewrite take_length; lia].
+      - rewrite lookup_app_l; [|rewrite length_take; lia].
         rewrite !lookup_take; [done|lia..].
-      - rewrite lookup_app_r; [|rewrite take_length; lia].
+      - rewrite lookup_app_r; [|rewrite length_take; lia].
         destruct (decide (i = ge - 2)) as [->|NE].
-        + rewrite take_length_le; [|lia]. rewrite lookup_take; [|lia].
+        + rewrite length_take_le; [|lia]. rewrite lookup_take; [|lia].
           assert (ge - 2 - (ge - 2) = 0) as -> by lia. by simplify_option_eq.
         + rewrite lookup_take_ge; [|lia]. rewrite lookup_ge_None_2; [done|].
-          rewrite take_length /=. lia.
+          rewrite length_take /=. lia.
     }
     assert (length (ehist' ++ [∅]) - 1 - 1 = ge) as Len_ge2.
-    { rewrite app_length /=. lia. }
+    { rewrite length_app /=. lia. }
     assert (length (ehist' ++ [∅]) - 1 = ge + 1) as Len_ge2_1.
-    { rewrite app_length /=. lia. }
+    { rewrite length_app /=. lia. }
 
-    (* Update epoch history and SlotInfos, getting new finalized tokens *)
+    (* Update epoch history and SlotInfos, getting new reclaimable tokens *)
     iAssert (|={E ∖ ↑ebrInvN}=>
       epoch_history_auth γeh ehist' ∗
       SlotInfos γV γtok γeh γe_nums slist sbvmap (ehist' ++ [∅]) ∗
-      toks γtok (gset_to_coPset (u_ge ∖ finalized)) ⊤
+      toks γtok (gset_to_coPset (u_ge ∖ old_reclaimable)) ⊤
     )%I with "[SInfo ehist]" as ">(ehist & SInfo & toks)".
     { (* Update [SInfo], from [ge] to [ge + 1] *)
       (* Non-Validated: Update [●γe_nums] *)
@@ -2257,19 +2243,19 @@ Proof.
       rewrite LenEQ. iFrame "●γe_nums_from".
       rewrite !take_app_le; [|lia..].
       rewrite HistDiff fold_hist_snoc.
-      fold ehistF. unfold toks.
+      fold ehistR. unfold toks.
 
-      (* get [⊤ ∖ gset_to_coPset ((fold_hist ehistF) ∪ u_ge)] from [toks] *)
-      assert (⊤ ∖ gset_to_coPset (fold_hist ehistF ∪ u_ge)
-              ⊆ ⊤ ∖ gset_to_coPset (fold_hist ehistF)) as Sub_ehsitF.
+      (* get [⊤ ∖ gset_to_coPset ((fold_hist ehistR) ∪ u_ge)] from [toks] *)
+      assert (⊤ ∖ gset_to_coPset (fold_hist ehistR ∪ u_ge)
+              ⊆ ⊤ ∖ gset_to_coPset (fold_hist ehistR)) as Sub_ehsitF.
       { rewrite -disjoint_complement. symmetry.
         rewrite disjoint_subset -gset_to_coPset_subset. set_solver.
       }
 
       (* Simplifying difference of tokens. *)
-      assert (⊤ ∖ gset_to_coPset (fold_hist ehistF)
-        ∖ (⊤ ∖ gset_to_coPset (fold_hist ehistF ∪ u_ge))
-        = gset_to_coPset (u_ge ∖ finalized))
+      assert (⊤ ∖ gset_to_coPset (fold_hist ehistR)
+        ∖ (⊤ ∖ gset_to_coPset (fold_hist ehistR ∪ u_ge))
+        = gset_to_coPset (u_ge ∖ old_reclaimable))
       as TopDiffDiag.
       { rewrite top_difference_diag -gset_to_coPset_difference. f_equal. set_solver. }
 
@@ -2280,12 +2266,12 @@ Proof.
       rewrite -token2_union_2; [|apply sids_to_sids_from_disjoint].
       iFrame "toks".
 
-      iInduction slist as [|slot slist] "IH" using rev_ind.
+      iInduction slist as [|slot slist IH] using rev_ind.
       { simpl. rewrite sids_to_0. iFrame. iApply token2_get_empty_2. }
       rewrite !big_sepL_snoc.
       iDestruct "SInfo" as "[SInfo slot]".
       iMod ("IH" with "SInfo ehist") as "{IH} (ehist & $ & toks)".
-      rewrite app_length !Nat.add_1_r sids_to_S.
+      rewrite length_app !Nat.add_1_r sids_to_S.
       rewrite -token2_union_2; [|apply sids_to_sid_disjoint; lia].
       iFrame "toks".
       destruct (sbvmap !! slot) as [[b oe]|]; last done.
@@ -2321,12 +2307,12 @@ Proof.
       iFrame.
       assert (e = ge) as -> by lia.
       assert (ehistF' = take (length ehist' - 2) ehist') as ->.
-      { apply prefix_length_eq; [|done]. rewrite take_length_le; lia. }
+      { apply prefix_length_eq; [|done]. rewrite length_take_le; lia. }
 
       rewrite token2_get_subset_1.
       { iDestruct "toks" as "[$ toks]". rewrite -!gset_to_coPset_difference.
         rewrite difference_diag.
-        - rewrite union_comm_L. fold ge ehistF finalized.
+        - rewrite union_comm_L. fold ge ehistR old_reclaimable.
           rewrite difference_union_distr_l_L difference_diag_L union_empty_r_L. iFrame.
         - apply fold_hist_prefix, take_prefix_le. lia.
         - apply union_least.
@@ -2356,10 +2342,10 @@ Proof.
         rewrite -!ghost_vars2_union_1; [|apply sids_to_sid_disjoint; lia..].
         iDestruct "GE_1" as "($ & ◯γeh & Slots)".
         iDestruct "GE_2_et_al" as "($ & $ & $)".
-        iInduction slist as [|slot slist] "IH" using rev_ind.
+        iInduction slist as [|slot slist IH] using rev_ind.
         { simpl. rewrite !sids_to_0 sids_from'_0. iFrame. iApply ghost_vars2_get_empty_2. }
         rewrite !big_sepL_snoc. iDestruct "Slots" as "[Slots slot]".
-        rewrite app_length Nat.add_1_r sids_to_S.
+        rewrite length_app Nat.add_1_r sids_to_S.
         rewrite -!ghost_vars2_union_2; [|by apply sids_to_sid_disjoint..].
         iDestruct "slot" as (b v V) "(%Hslot & γV & %HV & slot)".
         (* Preform case analysis on [V] and show that it must be false. *)
@@ -2379,9 +2365,9 @@ Proof.
       rewrite -!ghost_vars2_union_1; [|apply sids_from_sid_disjoint; lia..].
       iDestruct "γV_to_ge" as "[$ γV_to]".
       iDestruct "γV_from_ge" as "[$ $]".
-      iInduction slist as [|slot slist] "IH" using rev_ind.
+      iInduction slist as [|slot slist IH] using rev_ind.
       { rewrite sids_from'_0. by iFrame. }
-      rewrite app_length Nat.add_1_r sids_to_S.
+      rewrite length_app Nat.add_1_r sids_to_S.
       rewrite -!ghost_vars2_union_2; [|apply sids_to_sid_disjoint; lia..].
       rewrite !big_sepL_snoc.
       iDestruct "sbvmap" as "[sbvmap %sbvmap_slot]".
@@ -2403,28 +2389,28 @@ Proof.
     (* Get new snapshot *)
     iMod ((epoch_history_snapshot_get (ge + 1)) with "ehist") as "[ehist #◯ehist1]".
     { unfold ge. rewrite Nat.sub_add; [|lia]. rewrite -LenEQ snoc_lookup. done. }
-    (* Updated [Recl] *)
-    iAssert(ReclaimInfo γR γtok (ehist' ++ [∅]) info)%I
+    (* Update [Recl]: tokens for newly reclaimable pointers *)
+    iAssert (ReclaimInfo γR γtok (ehist' ++ [∅]) info)%I
       with "[Recl toks]" as "Recl".
     { unfold ReclaimInfo.
+      fold ge'. rewrite EQ. fold ehistR. fold old_reclaimable.
       iDestruct "Recl" as (reclaimed) "(γR_recl & γR_alive & γR_not_created & toksR)".
       iExists reclaimed. iFrame.
       rewrite Len_ge2_1 !take_app_le; [|lia..].
       rewrite HistDiff fold_hist_snoc.
-      fold ehistF. unfold toks, finalized.
+      fold ehistR. fold old_reclaimable.
       iDestruct (token2_valid_1 with "toksR toks") as %Disj; [done|].
       iCombine "toksR toks" as "toks".
       rewrite token2_union_1; [|done].
       rewrite token2_get_subset_1; [iDestruct "toks" as "[$ _]"|].
       rewrite -!gset_to_coPset_difference -gset_to_coPset_union
           -gset_to_coPset_subset.
-      rewrite LenEQ.
       apply union_differnce_subst_difference_union.
     }
     iModIntro.
     rewrite !Z.add_1_r !Nat.add_1_r -!Nat2Z.inj_succ.
     iSplitL "info ptrs ehist ret SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-    { repeat iExists _. iFrame "∗#%".
+    { iFrame "∗#%".
       rewrite fold_hist_snoc /= !union_empty_r_L. iFrame.
       rewrite Len_ge2_1 Nat.add_1_r /=.
       iNext. iFrame "∗". iPureIntro. split_and!; auto.
@@ -2433,9 +2419,10 @@ Proof.
       apply HPtrs; [|exact Hinfo_i].
       specialize (fold_hist_prefix (take (length ehist' - 1 - 2) ehist') (take (length ehist' - 1 - 1) ehist')
                                     ltac:(apply take_prefix_le; lia)) as SubTake.
-      set_solver.
+      set_solver +Hi SubTake.
     }
     wp_pures. iApply ("HΦ" with "◯ehist1").
+
   - (* Different, so another thread has updated the global epoch.*)
     (* Return the updated value value and a snapshot of it *)
     wp_cmpxchg_fail.
@@ -2443,7 +2430,7 @@ Proof.
     { apply lookup_lt_is_Some. lia. }
     iMod (epoch_history_snapshot_get ge' with "ehist") as "[ehist #◯ehist']"; [done|].
     iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-    { repeat iExists _. by iFrame "∗#%". }
+    { by iFrame "∗#%". }
     iModIntro. wp_pures. iApply ("HΦ" with "◯ehist'").
 Qed.
 
@@ -2460,12 +2447,12 @@ Proof.
   iInv "IED" as (info ptrs sbvmap slist rL1 ehist)
       "(>info & >ptrs & >ehist & >ret & >SB & >RL & >EInfo & >SInfo & >γU & >%Hdom_i & >%Hehist_len & >d.ge↦ & >Reg & >Recl & Ret & >%HInfo & >%HPtrs)".
   iAaccIntro with "RL".
-  { iIntros "RL !>". iSplit; [|done]. repeat iExists _. iFrame "∗#%". }
+  { iIntros "RL !>". iSplit; [|done]. iFrame "∗#%". }
   iIntros (rNode1) "[RL RNs]".
   iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl".
-  { repeat iExists _. iFrame "RL". iFrame "∗#%". rewrite big_sepL_nil. done. }
+  { iFrame "RL". iFrame "∗#%". rewrite big_sepL_nil. done. }
   clear dependent info ptrs sbvmap slist ehist.
-  iIntros "_ HΦ". wp_let.
+  iIntros "HΦ". wp_let.
   (* loop *)
   iLöb as "IH" forall (rNode1 rL1).
   wp_lam. wp_pures.
@@ -2483,18 +2470,21 @@ Proof.
   wp_pures.
 
   case_bool_decide as Hepoch1.
-  - (* Not ready to be retired *)
+  - (* can't be reclaimed yet *)
     wp_if. awp_apply (retired_list_push_spec with "RN") without "HΦ RNs".
     iInv "IED" as (info ptrs sbvmap slist rL2 ehist)
       "(>info & >ptrs & >ehist & >ret & >SB & >RL & >EInfo & >SInfo & >γU & >%Hdom_i & >%Hehist_len & >d.ge↦ & >Reg & >Recl & Ret' & >%HInfo & >%HPtrs)".
     iAaccIntro with "RL".
-    { iIntros "? !>". iFrame "Ret Ret_r". repeat iExists _. iFrame "∗#%". }
+    { iIntros "? !>".
+      (* Make sure to have Ret' first so that Ret does not get framed into EBRDomain. *)
+      iFrame "Ret' Ret ∗#%". }
     iIntros "RL". iModIntro.
     iSplitL "info ptrs ehist ret SB EInfo SInfo γU d.ge↦ Reg Recl RL Ret_r Ret'".
-    { repeat iExists _. iFrame "RL". iFrame "∗#%". }
-    iIntros "_ (HΦ & RN)". wp_seq.
+    { iFrame "RL ∗#%". }
+    iIntros "(HΦ & RN)". wp_seq.
     iApply ("IH" with "Ret RN HΦ").
-  - (* Retire the Node *)
+
+  - (* reclaim *)
     wp_if. wp_apply (rls.(retired_node_size_spec) with "RN") as "RN".
     wp_let.
     iDestruct "Ret_r" as (i R unlinked_e) "(Recl & #◯ehist & %i_in_unlinked_e)".
@@ -2553,15 +2543,16 @@ Proof.
     (* close *)
     iModIntro. iSplitL "info ptrs ehist ret SB RL EInfo SInfo γU d.ge↦ Reg Ret'
       ●R1 ●R2 ●R3 γR' T".
-    { repeat iExists _. iFrame. iNext. repeat iSplit; auto.
-      - iExists (reclaimed ∪ {[i]}).
-        rewrite elem_of_gset_to_coPset in n.
-        rewrite gset_to_coPset_union.
-        rewrite -ghost_vars2_union_1; last first.
-        { apply gset_to_coPset_disjoint. set_solver. }
-        rewrite !gset_to_coPset_difference gset_to_coPset_union -!gset_to_coPset_singleton .
-        rewrite !difference_union_difference.
-        iFrame.
+    {
+      iCombine "●R1 γR'" as "●R1".
+      rewrite !gset_to_coPset_difference -!gset_to_coPset_singleton.
+      rewrite elem_of_gset_to_coPset in n.
+      rewrite ghost_vars2_union_1; last first.
+      { apply gset_to_coPset_disjoint. set_solver. }
+      rewrite -!difference_union_difference -!gset_to_coPset_union -!gset_to_coPset_difference.
+
+      iFrame "●R2 ∗". iNext. repeat iSplit; auto.
+      - rewrite gset_to_coPset_difference. iFrame.
       - iPureIntro. intros p' i' Hp'. apply lookup_delete_Some in Hp' as [Hr1p Hp'].
         by apply HInfo in Hp'.
       - iPureIntro. intros i' p' Hi' [[[? size_i'] γc_i'] [Hp' [= ->]]].

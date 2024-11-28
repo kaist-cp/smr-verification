@@ -32,6 +32,23 @@ Implicit Types
 Local Ltac exfr := (repeat iExists _); iFrame "∗#"; eauto.
 Local Ltac tspd := try (iSplit; [done|]); try (iSplit; [|done]).
 
+(* NOTE: γU ghost is actually not necessary in HP, because Managed can directly assert γR flag. *)
+
+(* NOTE: Maybe γV ghost could've been 1D `slot ↦ Some ptr`.
+
+  [∗ list] si ↦ slot ∈ slist, ∃ (b : bool) v (oi : option positive),
+    ⌜ sbvmap !! slot = Some (b, v) ⌝ ∗
+    (sid si) ↦p[γV]{1/2} oi ∗
+    match oi with
+    | Some i =>
+        ⌜∃ info_i, info !! i = Some info_i ∧ b = true ∧ v = Some info_i.1.(addr) ⌝
+        toknes for all ptrs except i
+    | None =>
+        all tokens
+
+But what about γR?
+*)
+
 (*
 |        | slist | ⊤∖slist |
 |--------|-------|---------|
@@ -106,7 +123,7 @@ Definition HazardDomain γsb γtok γinfo γdata γptrs γU γR γV (d hBag rSet
       ⌜info !! i = Some info_i⌝ ∗
       (* Permission for freeing the pointer with this length.
       This is used for proving [hazard_domain_register]. *)
-      †(blk_to_loc p)…info_i.1.(len)) ∗
+      †(Loc.blk_to_loc p)…info_i.1.(len)) ∗
 
     ([∗ list] rle ∈ rs, let '(r,len,_) := rle in ∃ i R,
       Retired (mgmtN N) (ptrsN N) γtok γinfo γdata γptrs γU γR r i len R) ∗
@@ -165,7 +182,7 @@ Lemma big_sepL_seq {A} (Φ : nat → iProp) (l : list A) :
   ([∗ list] i ↦ _ ∈ l, Φ i).
 Proof.
   induction l as [|x l IH] using rev_ind; auto.
-  rewrite app_length seq_app; simpl.
+  rewrite length_app seq_app; simpl.
   do 2 rewrite big_sepL_app. rewrite IH.
   do 2 rewrite big_sepL_singleton. rewrite -plus_n_O.
   auto.
@@ -175,18 +192,11 @@ Qed.
 
 Global Instance GhostQuadrants_timeless γtok γinfo γptrs γU γR γV info sbvmap slist:
   Timeless (GhostQuadrants γtok γinfo γptrs γU γR γV info sbvmap slist).
-Proof.
-  repeat (
-    intros ||
-    apply bi.sep_timeless || apply bi.exist_timeless ||
-    apply big_sepM_timeless || apply big_sepL_timeless ||
-    apply _ || case_match
-  ).
-Qed.
+Proof. apply _. Qed.
 
 Global Instance inactive_shield_timeless γV sbvmap slist :
   Timeless (InactiveShield γV sbvmap slist).
-Proof. apply big_sepL_timeless; intros; repeat case_match; apply _. Qed.
+Proof. apply _. Qed.
 
 (* Ghost maintenance lemmas *)
 
@@ -237,9 +247,8 @@ Proof.
     iMod token2_get_empty_2 as "$".
 
     unfold CC. rewrite big_sepM_insert; last by done. iFrame "∗#".
-    iExists false. iFrame.
-    iInduction slist as [|si slist] "IH" using rev_ind; [by rewrite !big_sepL_nil|].
-    rewrite app_length Nat.add_1_r sids_to_S.
+    iInduction slist as [|si slist IH] using rev_ind; [by rewrite !big_sepL_nil|].
+    rewrite length_app Nat.add_1_r sids_to_S.
     rewrite !big_sepL_snoc. iDestruct "hmap" as "[hmap %Hsi]".
     rewrite -!ghost_vars2_union_2; [|by apply sids_to_sid_disjoint..].
     rewrite -token2_union_2; [|by apply sids_to_sid_disjoint].
@@ -295,7 +304,7 @@ Proof.
       (⊤ ∖ gset_to_coPset (dom info),sids_from (length (slist ++ [slot]))) ↦P2[γV] false ∗
       (⊤ ∖ gset_to_coPset (dom info),{[sid (length slist)]}) ↦P2[γV]{ 1/2 } false
     )%I with "[●UCv ●UUv]" as "($ & $ & $)".
-    { rewrite app_length /= Nat.add_1_r sids_from_S.
+    { rewrite length_app /= Nat.add_1_r sids_from_S.
       rewrite ghost_vars2_insert_2; [|apply sids_from_not_elem_of; lia].
       iDestruct "●UUv" as "[$ [$ ●UUv]]".
       iCombine "●UCv ●UUv" as "●Uv".
@@ -307,7 +316,7 @@ Proof.
       (⊤ ∖ gset_to_coPset (dom info),sids_to (length (slist ++ [slot]))) ↦P2[γR] false ∗
       (⊤ ∖ gset_to_coPset (dom info),sids_from (length (slist ++ [slot]))) ↦P2[γR] false
     )%I with "[●UCr ●UUr]" as "[$ $]".
-    { rewrite app_length /= Nat.add_1_r sids_from_S.
+    { rewrite length_app /= Nat.add_1_r sids_from_S.
       rewrite ghost_vars2_insert_2; [|apply sids_from_not_elem_of; lia].
       iDestruct "●UUr" as "[$ ●UUr]".
       iCombine "●UCr ●UUr" as "●Ur".
@@ -319,7 +328,7 @@ Proof.
       toks γtok (⊤ ∖ gset_to_coPset (dom info)) (sids_to (length (slist ++ [slot]))) ∗
       toks γtok (⊤ ∖ gset_to_coPset (dom info)) (sids_from (length (slist ++ [slot])))
     )%I with "[●UCt ●UUt]" as "[$ $]".
-    { rewrite app_length /= Nat.add_1_r sids_from_S.
+    { rewrite length_app /= Nat.add_1_r sids_from_S.
       unfold toks.
       rewrite token2_insert_2; [|apply sids_from_not_elem_of; lia].
       iDestruct "●UUt" as "[$ ●UUt]".
@@ -336,7 +345,7 @@ Proof.
   }
   (** Move from [CU] to [CC] *)
   rewrite -assoc.
-  iInduction info as [|loc v info] "IH" using map_ind.
+  iInduction info as [|loc v info Hinfo IH] using map_ind.
   { unfold CC, CU. rewrite dom_empty_L gset_to_coPset_empty difference_empty_L !big_sepM_empty. iFrame. }
   iDestruct (big_sepM_delete with "●CC") as "[●CCloc ●CC]"; [by simplify_map_eq|].
   rewrite delete_insert; [|done].
@@ -351,7 +360,7 @@ Proof.
     (loc,sid (length slist)) ↦p2[γV]{ 1/2 } false ∗
     (loc,sid (length slist)) ↦p2[γV]{ 1/2 } false
   )%I with "[●CUv]" as "(●CUv & ●v & ●CCv)".
-  { rewrite app_length /= Nat.add_1_r sids_from_S.
+  { rewrite length_app /= Nat.add_1_r sids_from_S.
     rewrite ghost_vars2_insert_2; [|apply sids_from_not_elem_of; lia].
     iDestruct "●CUv" as "[$ [$ $]]".
   }
@@ -371,16 +380,16 @@ Proof.
   )%I with "[●CUt]" as "[●CCt ●CUt]".
   { iEval (rewrite sids_from_S) in "●CUt".
     destruct R; [done|]. unfold toks.
-    rewrite app_length Nat.add_1_r.
+    rewrite length_app Nat.add_1_r.
     rewrite token2_insert_2; last by apply sids_from_not_elem_of; lia.
     iDestruct "●CUt" as "[$ $]".
   }
   iSplitR "●loc↦pU ●CUt ●CU ●CUv ●CUr".
   - unfold CC. rewrite big_sepM_insert; last by done.
     iSplitR "●CC"; [|iFrame].
-    iExists U. iFrame "∗#%". rewrite big_sepL_snoc.
+    iExists U. iFrame "∗#%". rewrite !Nat.add_0_r.
     iSplitL "●CCloc"; last first.
-    + repeat iExists _. simplify_map_eq. iSplit; [done|].
+    + iSplitL; [|done]. repeat iExists _. simplify_map_eq. iSplit; [done|].
       iFrame. iFrame "●CCt". iPureIntro. done.
     + iApply (big_sepL_mono with "●CCloc"). iIntros (i slot' Hslot') "●loc".
       iDestruct "●loc" as (?? V R') "(%&?&?&%F&%&?)".
@@ -390,7 +399,7 @@ Proof.
   - unfold CU. rewrite big_sepM_insert; last by done.
     iSplitR "●CU"; [|iFrame].
     iExists U, R. iFrame "∗#%".
-    by rewrite app_length /= Nat.add_1_r.
+    by rewrite length_app /= Nat.add_1_r.
 Qed.
 
 Lemma ghost_quadrants_activate slot v γtok γinfo γptrs γU γR γV info hmap slist :
@@ -408,7 +417,7 @@ Proof.
     rewrite lookup_insert_ne; [done|intros <-; congruence]. }
   iClear "hmap". unfold CC.
 
-  iInduction info as [|loc v' info] "IH" using map_ind; first by rewrite !big_sepM_empty.
+  iInduction info as [|loc v' info Hinfo IH] using map_ind; first by rewrite !big_sepM_empty.
   rewrite big_sepM_insert; last done.
   iDestruct "●CC" as "[●CCloc ●CC]".
   iSpecialize ("IH" with "●CC").
@@ -480,9 +489,9 @@ Proof.
     rewrite lookup_insert_ne; [done|intros <-; congruence]. }
   iClear "hmap". unfold CC.
 
-  iInduction info as [|i info_i info] "IH" using map_ind.
-  { rewrite !big_sepM_empty. iFrame. }
-  rewrite big_sepM_insert; last done.
+  iInduction info as [|i info_i info Hinfo IH] using map_ind.
+  { rewrite !big_sepM_empty right_id //. }
+  rewrite big_sepM_insert //.
   iDestruct "●CC" as "[●CCloc ●CC]".
   iSpecialize ("IH" with "●CC ●v").
   iDestruct "IH" as "[●v IH]".
@@ -491,7 +500,7 @@ Proof.
 
   iDestruct "●CCloc" as (U) "[●loc↦pC ●CCloc]".
   rewrite bi.sep_exist_r. iExists U. iFrame "●loc↦pC IH".
-  iInduction slist as [|slot' slist] "IH" using rev_ind.
+  iInduction slist as [|slot' slist IH] using rev_ind.
   { rewrite !big_sepL_nil. iFrame. }
   rewrite -NoDup_snoc in NoDup. destruct NoDup as [NoDup NotIn].
   destruct (decide (slot' = slot)) as [->|NE].
@@ -506,14 +515,14 @@ Proof.
     }
     iDestruct "●loc_slot" as (b'' oloc V R) "(%&●iv&●ir&%&%&IF)".
     assert (idx = (length slist)) as ->.
-    { apply lookup_lt_Some in Hidx as LE. rewrite app_length /= in LE.
+    { apply lookup_lt_Some in Hidx as LE. rewrite length_app /= in LE.
       assert (¬ (idx < (length slist))).
       { intro LT. rewrite lookup_app_l in Hidx; last done.
         apply NotIn. rewrite elem_of_list_lookup. eauto. }
       lia.
     }
     iDestruct (ghost_vars2_agree with "●iv ●v") as %->; [set_solver..|].
-    iFrame. iExists b,v,false,R. iFrame "∗#%".
+    iFrame. iExists b,v. iFrame "∗#%".
     iPureIntro. split; [by simplify_map_eq|inversion 1].
   - apply lookup_snoc_ne in Hidx; last done.
     rewrite !big_sepL_snoc.
@@ -738,7 +747,7 @@ Proof.
   wp_let.
   wp_apply sbs.(slot_bag_new_spec); auto.
   iIntros (γsb slotbag) "SlotBag".
-  wp_pures. rewrite loc_add_0. wp_store.
+  wp_pures. rewrite Loc.add_0. wp_store.
   wp_apply rls.(retired_list_new_spec); auto.
   iIntros (rList) "RList".
   wp_store.
@@ -754,10 +763,10 @@ Proof.
     iPureIntro. split_and!; [done..|by rewrite !dom_empty_L|]. intros l i Hli.
     rewrite lookup_empty in Hli. congruence.  }
   iMod (inv_alloc hazptrInvN _ (HazardDomain _ _ _ _ _ _ _ _ _ _ _) with "HD") as "#HDInv".
-  iMod (mapsto_persist with "d.s↦") as "#d.s↦".
-  iMod (mapsto_persist with "d.r↦") as "#d.r↦".
+  iMod (pointsto_persist with "d.s↦") as "#d.s↦".
+  iMod (pointsto_persist with "d.r↦") as "#d.r↦".
   iModIntro. iApply "HΦ".
-  repeat iExists _. rewrite loc_add_0. iFrame "∗#%".
+  repeat iExists _. rewrite Loc.add_0. iFrame "∗#%".
 Qed.
 
 Lemma hazard_domain_register :
@@ -872,9 +881,9 @@ Proof.
     iDestruct (inactive_shield_insert with "●X") as "●X"; eauto.
 
     iSplitR "●TS S"; [exfr|].
-    iIntros "_ HΦ". wp_pures.
+    iIntros "HΦ". wp_pures.
     wp_alloc shield as "Sh" "†shield". wp_pures.
-    rewrite -{1}(loc_add_0 shield) array_singleton.
+    rewrite -{1}(Loc.add_0 shield) array_singleton.
     wp_store.
     iModIntro. iApply "HΦ". exfr.
   - (* old slot reacquired *)
@@ -885,10 +894,10 @@ Proof.
     iDestruct (inactive_shield_activate with "●X") as "[●X ●TI]"; eauto.
 
     iSplitR "S ●TI"; [exfr|].
-    iIntros "_ HΦ". wp_pures.
+    iIntros "HΦ". wp_pures.
     wp_alloc shield as "Sh" "†shield".
     wp_pures.
-    rewrite -{1}(loc_add_0 shield) array_singleton.
+    rewrite -{1}(Loc.add_0 shield) array_singleton.
     wp_store.
     iModIntro. iApply "HΦ". unfold Shield.
     repeat iExists _. iFrame. iSplit; auto.
@@ -926,7 +935,7 @@ Proof.
     iModIntro.
     iDestruct (ghost_quadrants_set idx slot p with "●Q ●TI") as "[●Q ●TI]"; [done..|].
     iSplitR "Shs↦ †Sh ShSlot ●TI"; last first.
-    { iIntros "_ HΦ". iApply "HΦ". exfr. iSplit; auto. destruct p; auto. }
+    { iIntros "HΦ". iApply "HΦ". exfr. iSplit; auto. destruct p; auto. }
     iNext. exfr. iSplit; auto.
     iApply inactive_shield_reactivate; done.
   }
@@ -963,7 +972,7 @@ Proof.
 
     (* Get the resource for old validated pointer *)
     iSplitR "●ShiX Shs↦ †Sh ShSlot"; last first.
-    { iIntros "_ HΦ". iApply "HΦ". exfr. iSplit; auto. destruct p; by iFrame. }
+    { iIntros "HΦ". iApply "HΦ". exfr. iSplit; auto. destruct p; by iFrame. }
 
     iExists info, data, ptrs, _, _, _. iFrame. iNext.
     iSplit; [|done].
@@ -1027,7 +1036,7 @@ Proof.
     iDestruct (inactive_shield_drop with "●X ●Sh") as "●X"; [done..|].
     iSplitR "ShH †Sh".
     { iNext. repeat iExists _. iFrame "∗#%". }
-    iIntros "_ HΦ". wp_seq. rewrite !loc_add_0 -!array_singleton.
+    iIntros "HΦ". wp_seq. rewrite !Loc.add_0 -!array_singleton.
     wp_free; first done. by iApply "HΦ".
   }
   iAssert ((s +ₗ 0) ↦ #slot -∗ †s…shieldSize -∗
@@ -1049,7 +1058,7 @@ Proof.
     iDestruct (inactive_shield_unset with "●X") as "●X"; [done..|].
     iSplitR "ShH †Sh S ●Sh HΦ".
     { iNext. repeat iExists _. iFrame "∗#%". }
-    iIntros "_". wp_seq. by iApply ("drop" with "ShH †Sh S ●Sh HΦ").
+    wp_seq. by iApply ("drop" with "ShH †Sh S ●Sh HΦ").
   }
   destruct s_st.
   - (* Deactivated Shield *)
@@ -1093,7 +1102,7 @@ Proof.
       iApply inactive_shield_reactivate; done.
     }
 
-    iIntros "_". wp_seq. by iApply ("drop" with "ShH †Sh S ●Sh HΦ").
+    wp_seq. by iApply ("drop" with "ShH †Sh S ●Sh HΦ").
 Qed.
 
 Lemma shield_unset_spec :
@@ -1126,7 +1135,7 @@ Proof.
     iDestruct (ghost_quadrants_set idx slot None with "●Q ●Sh") as "[●Q ●Sh]"; [done..|].
 
     iModIntro. iSplitR "ShH †Sh S ●Sh"; last first.
-    { iIntros "_ HΦ". iApply "HΦ". exfr. }
+    { iIntros "HΦ". iApply "HΦ". exfr. }
     iNext. exfr. iSplit; auto.
     iApply inactive_shield_reactivate; done.
   }
@@ -1165,7 +1174,7 @@ Proof.
 
     (* Get the resource for old validated pointer *)
     iSplitR "●ShiX Shs↦ †Sh ShSlot"; last first.
-    { iIntros "_ HΦ". iApply "HΦ". exfr. }
+    { iIntros "HΦ". iApply "HΦ". exfr. }
 
     iExists info, data, ptrs, _, _, _. iFrame. iNext.
     iSplit; [|done].
@@ -1192,9 +1201,8 @@ Proof.
   - iMod (shield_validate with "IHD pa2↦ Sh") as "[pa2↦ S]"; [solve_ndisj|].
     iDestruct "CloseAU" as "[_ Commit]".
     iMod ("Commit" with "[$a↦ $pa2↦ $S]") as "HΦ".
-    iModIntro. wp_let. wp_op.
-    rewrite bool_decide_eq_true_2 //.
-    wp_if. by iApply "HΦ".
+    iModIntro. wp_pures.
+    by iApply "HΦ".
   - iDestruct "CloseAU" as "[_ Commit]".
     iMod ("Commit" with "[$a↦ $Sh]") as "HΦ".
     iModIntro. wp_let. wp_op. wp_if. by iApply "HΦ".
@@ -1295,7 +1303,7 @@ Proof.
   iMod (ghost_quadrants_retire with "GR ●Q GU") as "(GR & ●Q & GU)"; auto.
 
   iModIntro. iSplitL; last first.
-  { iIntros "_ HΦ". by iApply "HΦ". }
+  { iIntros "HΦ". by iApply "HΦ". }
   repeat (exfr; tspd).
 Qed.
 
@@ -1431,7 +1439,7 @@ Proof.
     }
     set dropped := drop (rem' + 1) slist1.
     have ? : length dropped = slen1 - (rem' + 1).
-    { by rewrite drop_length. }
+    { by rewrite length_drop. }
     have ? : dropped ≠ [].
     { move => /(f_equal length) /=. lia. }
     iDestruct (big_sepL_sids_range_1 (λ E, ({[i]},E) ↦P2[γR]{ 1/2 } true)
@@ -1458,7 +1466,7 @@ Proof.
     iDestruct (ghost_vars2_agree with "γR_R_k γR_CC_k") as %<-; [set_solver..|].
     destruct V; [done|].
     iMod (ghost_vars2_update_halves' false with "γR_R_k γR_CC_k") as "[? $]".
-    iModIntro. iExists _,_,false,false. iFrame "%∗". done. }
+    iModIntro. iFrame "%∗". unfold stok. iFrame. done. }
 
   iModIntro.
   (* Reassemble the resources and process the remaining retired pointers. *)
@@ -1468,7 +1476,7 @@ Proof.
     rewrite Hslist2. iApply big_sepL_app. iFrame "CC_i_from1".
     iApply (big_sepL_take_drop _ _ rem'). iFrame. }
 
-  iExists i,R. iFrame. iExists _,_. iFrame.
+  iExists i,R. iFrame.
 Qed.
 
 Lemma add_if_active_still_not_protected γtok γinfo γdata γptrs γU γR γV
@@ -1533,7 +1541,7 @@ Proof.
     rewrite (_ : take 1 (drop rem' slist1) = [slot]); simpl; last first.
     { apply take_drop_middle in Hrem'. rewrite -Hrem'.
       have Htakerem' : length (take rem' slist1) = rem'.
-      { rewrite take_length. lia. }
+      { rewrite length_take. lia. }
       rewrite drop_app_ge; last lia.
       rewrite Htakerem' Nat.sub_diag drop_0 /= take_0 //. }
     rewrite (right_id emp%I) Nat.add_0_r.
@@ -1546,7 +1554,7 @@ Proof.
     { exfalso. specialize (HV ltac:(done)) as [-> ->]. naive_solver. }
     iDestruct (ghost_vars2_agree with "γR_R_rem' γR_CC_rem'") as %<-; [set_solver..|].
     iMod (ghost_vars2_update_halves' true with "γR_R_rem' γR_CC_rem'") as "[γR_R_rem' γR_CC_rem']".
-    iModIntro. iFrame. iExists _,_,false,true. iFrame "%∗". done. }
+    iModIntro. iFrame. iExists _,_. iFrame "%∗". done. }
 
 
   iModIntro.
@@ -1557,7 +1565,7 @@ Proof.
     rewrite Hslist2. iApply big_sepL_app. iFrame "CC_i_from1".
     iApply (big_sepL_take_drop _ _ rem'). iFrame. }
 
-  iExists i,R. iFrame. iExists _,_. iFrame.
+  iExists i,R. iFrame.
 Qed.
 
 Lemma hazard_bag_snapshot_spec :
@@ -1606,7 +1614,7 @@ Proof.
       toks γtok {[i]} (sids_from slen1))
   )%I with "[●info CU Reclaiming]" as ">(●info & CU & Reclaiming)".
   { (* Can use [big_sepL_mono], but need to fully spell out the goal since I need the update. *)
-    iInduction rs as [|[[r len] ?] rs'] "IH".
+    iInduction rs as [|[[r len] ?] rs' IH].
     { rewrite !big_sepL_nil. by iFrame. }
     rewrite !big_sepL_cons.
     iDestruct "Reclaiming" as "[R Reclaiming']".
@@ -1678,12 +1686,12 @@ Proof.
 
   (* Proof of the loop spec *)
   iIntros (Φ') "(#Inv & #SL & Bag & Reclaiming) HΦ'".
-  iInduction rem as [|rem'] "IH" forall (snap).
+  iInduction rem as [|rem' IH] forall (snap).
   { (* Finished snapshot. *)
     clear Hrem. unfold SnapshotLoopInv, SnapshotLoopInv_r.
     rewrite sids_range_0_sids_to. simpl.
     wp_lam. wp_pures. iApply "HΦ'". iFrame "Bag".
-    iInduction rs as [|[[r len] ?] rs'] "IHrs".
+    iInduction rs as [|[[r len] ?] rs' IHrs].
     { rewrite big_sepL_nil //. }
     rewrite !big_sepL_cons.
     iDestruct "Reclaiming" as "[R Reclaiming']".
@@ -1708,7 +1716,7 @@ Proof.
     have LE12 : slen1 ≤ slen2 by apply prefix_length.
     have [slist12 Hslist2] := PF12.
     have Hslen12 : length slist12 = slen2 - slen1.
-    { subst slist2 slen1 slen2. rewrite app_length. lia. }
+    { subst slist2 slen1 slen2. rewrite length_app. lia. }
     rewrite (sids_from_prefix _ _ LE12).
     rewrite -ghost_vars2_union_2; last by apply sids_range_sids_from_disjoint.
     rewrite -toks_union_2; last by apply sids_range_sids_from_disjoint.
@@ -1748,7 +1756,7 @@ Proof.
       clear HUR. iClear "emp".
       iMod (ghost_vars2_update_halves' false with "γR_i_k γR_CC") as "[γR_i_k γR_CC]".
       iFrame.
-      iModIntro. iExists _,_,false,false. iFrame. done.
+      iModIntro. iExists _,_. iFrame. done.
     }
 
     (* Return toks_from2 *)
@@ -1816,7 +1824,7 @@ Proof.
     )%I with "[●info CC Reclaiming]" as ">(●info & CC & Reclaiming)".
     { iClear "#".
       unfold SnapshotLoopInv, AddIfActivePost.
-      iInduction rs as [|[[r len] ?] rs'] "IH".
+      iInduction rs as [|[[r len] ?] rs' IH].
       { rewrite !big_sepL_nil. iModIntro. iFrame. }
       rewrite !big_sepL_cons /=.
       iDestruct "Reclaiming" as "[R Reclaiming']".
@@ -1894,7 +1902,7 @@ Proof.
   )%I with "[●info CC Reclaiming]" as ">(●info & CC & Reclaiming)".
   { iClear "#".
     unfold SnapshotLoopInv, AddIfActivePost.
-    iInduction rs as [|[[r len] ?] rs'] "IH".
+    iInduction rs as [|[[r len] ?] rs' IH].
     { rewrite !big_sepL_nil. by iFrame. }
 
     (* Process the retired pointer [r]. *)
@@ -1978,7 +1986,7 @@ Proof.
   iModIntro.
   iSplitL "RS B M datM coM ●Q ●X Reg".
   { iExists info,data,ptrs,hmap1,slist1,[]. exfr. }
-  iIntros "_ HΦ". wp_pures.
+  iIntros "HΦ". wp_pures.
   wp_load. wp_let.
 
   (* snapshot *)
@@ -2015,7 +2023,7 @@ Proof.
     iModIntro.
     iSplitL "◯i M datM coM B ●Q ●X Reg Ret RS".
     { iNext. exfr. }
-    iIntros "_ (◯ & HΦ & [RN Seq])". wp_seq.
+    iIntros "(◯ & HΦ & [RN Seq])". wp_seq.
     wp_apply ("IH" with "RN HΦ Seq"); auto.
 
   - (* not hazard: r1 is not in snap. can free. *)

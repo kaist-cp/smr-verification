@@ -17,10 +17,8 @@ Definition hm_find_inner : val :=
     else if: "curr_new" ≠ ("curr") then
       "loop" "domain" "key" "prev" "curr_new" "prev_sh" "curr_sh"
     else
-      let: "next" := !("curr" +ₗ #next) in
-      let: "tagged" := (tag "next") ≠ #0 in
-      resolve_proph: "p" to: "tagged" ;;
-      if: "tagged" then
+      let: "next" := Resolve (!("curr" +ₗ #next)) "p" #() in
+      if: (tag "next") ≠ #0 then
         (if: CAS ("prev" +ₗ #next) "curr" (untag "next") then
           hazptr.(hazard_domain_retire) "domain" "curr" #nodeSize;;
           "loop" "domain" "key" "prev" (untag "next") "prev_sh" "curr_sh"

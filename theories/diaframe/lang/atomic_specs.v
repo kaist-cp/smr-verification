@@ -63,7 +63,7 @@ Section biabd_instances.
   Context `{!heapGS Σ}.
 
   Section mergable.
-    Global Instance mergable_consume_mapsto_persist l v1 v2 :
+    Global Instance mergable_consume_pointsto_persist l v1 v2 :
       MergableConsume (l ↦□ v1)%I true (λ p Pin Pout, TCAnd (TCEq Pin (l ↦□ v2)) (TCEq Pout (l ↦□ v1 ∗ ⌜v1 = v2⌝)))%I | 40.
     Proof.
       rewrite /MergableConsume => p Pin Pout [-> ->].
@@ -71,7 +71,7 @@ Section biabd_instances.
       iStepsS.
     Qed.
 
-    Global Instance mergable_consume_mapsto_own q1 q2 q l v1 v2 :
+    Global Instance mergable_consume_pointsto_own q1 q2 q l v1 v2 :
       MergableConsume (l ↦{#q1} v1)%I true (λ p Pin Pout,
           TCAnd (TCEq Pin (l ↦{#q2} v2)) $
           TCAnd (proofmode_classes.IsOp (A := fracR) q q1 q2) $
@@ -85,7 +85,7 @@ Section biabd_instances.
       iStepsS.
     Qed.
 
-    Global Instance mergable_persist_mapsto_dfrac_own q1 dq2 l v1 v2 :
+    Global Instance mergable_persist_pointsto_dfrac_own q1 dq2 l v1 v2 :
       MergablePersist (l ↦{#q1} v1)%I (λ p Pin Pout, TCAnd (TCEq Pin (l ↦{dq2} v2)) (TCEq Pout ⌜v1 = v2⌝%Qp))%I | 50.
     Proof.
       rewrite /MergableConsume => p Pin Pout [-> ->].
@@ -93,7 +93,7 @@ Section biabd_instances.
       iStepsS.
     Qed.
 
-    Global Instance mergable_persist_mapsto_dfrac_own2 q1 dq2 l v1 v2 :
+    Global Instance mergable_persist_pointsto_dfrac_own2 q1 dq2 l v1 v2 :
       MergablePersist (l ↦{dq2} v1)%I (λ p Pin Pout, TCAnd (TCEq Pin (l ↦{#q1} v2)) (TCEq Pout ⌜v1 = v2⌝%Qp))%I | 50.
     Proof.
       rewrite /MergableConsume => p Pin Pout [-> ->].
@@ -102,7 +102,7 @@ Section biabd_instances.
     Qed.
 
     (* this last instance is necessary for opaque dq1 and dq2 *)
-    Global Instance mergable_persist_mapsto_last_resort dq1 dq2 l v1 v2 :
+    Global Instance mergable_persist_pointsto_last_resort dq1 dq2 l v1 v2 :
       MergablePersist (l ↦{dq1} v1)%I (λ p Pin Pout, TCAnd (TCEq Pin (l ↦{dq2} v2)) (TCEq Pout ⌜v1 = v2⌝))%I | 99.
     Proof.
       rewrite /MergableConsume => p Pin Pout [-> ->].
@@ -112,14 +112,14 @@ Section biabd_instances.
   End mergable.
 
   Section biabds.
-    Global Instance mapsto_val_may_need_more (l : loc) (v1 v2 : val) (q1 q2 : Qp) mq q :
+    Global Instance pointsto_val_may_need_more (l : loc) (v1 v2 : val) (q1 q2 : Qp) mq q :
       FracSub q2 q1 mq →
       TCEq mq (Some q) →
       HINT l ↦{#q1} v1 ✱ [v'; ⌜v1 = v2⌝ ∗ l ↦{#q} v'] ⊫ [id];
            l ↦{#q2} v2 ✱ [⌜v1 = v2⌝ ∗ ⌜v' = v1⌝] | 55.
     Proof. move => <- ->. iStepsS. Qed.
 
-    Global Instance mapsto_val_have_enough (l : loc) (v1 v2 : val) (q1 q2 : Qp) mq :
+    Global Instance pointsto_val_have_enough (l : loc) (v1 v2 : val) (q1 q2 : Qp) mq :
       FracSub q1 q2 mq →
       HINT l ↦{#q1} v1 ✱ [- ; ⌜v1 = v2⌝] ⊫ [id]; l ↦{#q2} v2 ✱ [⌜v1 = v2⌝ ∗ match mq with Some q => l ↦{#q} v1 | _ => True end] | 54.
     Proof.
@@ -128,11 +128,11 @@ Section biabd_instances.
       iDestruct "H1" as "[? ?]". iSteps.
     Qed.
 
-    Global Instance as_persistent_mapsto p l q v :
+    Global Instance as_persistent_pointsto p l q v :
       HINT □⟨p⟩ l ↦{q} v ✱ [- ; emp] ⊫ [bupd]; l ↦□v ✱ [l ↦□ v] | 100.
     Proof.
       iStepS. rewrite bi.intuitionistically_if_elim.
-      iMod (mapsto_persist with "H1") as "#Hl".
+      iMod (pointsto_persist with "H1") as "#Hl".
       iStepsS.
     Qed.
   End biabds.

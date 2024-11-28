@@ -12,10 +12,10 @@ Set Printing Projections.
 Local Open Scope nat_scope.
 
 Class dglmG Σ := DGLMG {
-  dglm_inG :> inG Σ (agreeR natO);
-  dglm_mono_listG :> mono_listG (gname * blk * val) Σ;
-  dglm_mono_natG :> mono_natG Σ;
-  dglm_ghost_varG :> ghost_varG Σ bool;
+  #[local] dglm_inG :: inG Σ (agreeR natO);
+  #[local] dglm_mono_listG :: mono_listG (gname * blk * val) Σ;
+  #[local] dglm_mono_natG :: mono_natG Σ;
+  #[local] dglm_ghost_varG :: ghost_varG Σ bool;
 }.
 
 Definition dglmΣ : gFunctors := #[GFunctor (agreeR natO); mono_listΣ (gname * blk *val); mono_natΣ; ghost_varΣ bool].
@@ -116,7 +116,7 @@ Proof.
   have Hih: (ih < length CL). {
     rewrite -list_lookup_fmap in Hhmap.
     remember (lookup_lt_Some _ _ _ Hhmap) as H. clear HeqH.
-    rewrite fmap_length in H. done.
+    rewrite length_fmap in H. done.
   }
   lia.
 Qed.
@@ -257,9 +257,9 @@ Lemma Nodes_insert {γe γcl} CL ih i_p γ_p p x_p :
 Proof.
   iIntros (? ->) "Nodes G_p Idx_p Taken_p".
   unfold Nodes. rewrite !fmap_drop fmap_app /=.
-  rewrite drop_app_le; last by rewrite fmap_length.
+  rewrite drop_app_le; last by rewrite length_fmap.
   iApply big_sepL_snoc. iFrame "Nodes".
-  rewrite drop_length fmap_length.
+  rewrite length_drop length_fmap.
   replace (ih + (length CL - ih)) with (length CL) by lia. iFrame.
 Qed.
 
@@ -318,10 +318,10 @@ Proof.
   - iDestruct "Gt_p" as (? [-> ?]) "●CL_T". simpl. iLeft.
     iExists CL. iSplit; [done|]. iFrame "●CL_T". iSplit.
     + iIntros. iExists i_p, x_p, None. iFrame "∗#%". iSplit; [done|]. iLeft. iExists CL. iFrame. done.
-    + iIntros. iExists i_p, x_p, (Some n_p). iFrame "∗#%". iSplit; [done|]. iRight. iExists _,_,_. iFrame "#". done.
-  - iDestruct "Gt_p" as (n_p γ_n_p x_n_p ->) "#[Idx_n_p Info_n_p]". simpl. iRight.
-    iExists _,_,_. iSplit; [done|]. iFrame "#".
-    iIntros. iExists _, x_p, (Some n_p). iFrame "∗#". iSplit; [done|]. iRight. iExists _,_,_. iFrame "#". done.
+    + iIntros. iFrame "∗#%". iExists (Some n_p). iSplit; [done|]. iRight. done.
+  - iDestruct "Gt_p" as (n_p γ_n_p x_n_p ->) "#[Idx_n_p Info_n_p]".
+    iRight. iFrame "#". iSplit; [done|].
+    iExists (Some n_p). iFrame "∗#". iSplit; [done|]. iRight. done.
 Qed.
 
 Lemma alloc_node_resources idx:
@@ -333,8 +333,8 @@ Proof.
   iAssert (node_idx γ_s idx) with "[Idx_s']" as "Idx_s".
   { iExists γi_s, γr_s. iFrame "∗%". }
   iAssert (node_reaped γ_s 1 false) with "[γr_s]" as "Reaped".
-  { iExists _, _. iFrame "∗%". }
-  iExists γ_s. iFrame "∗#". done.
+  { iFrame "∗%". }
+  iFrame "∗#". done.
 Qed.
 
 Lemma queue_new_spec :
@@ -345,9 +345,9 @@ Proof.
   wp_apply (wp_store_offset with "s↦") as "s↦"; [by simplify_list_eq|]; wp_pures.
   wp_alloc qu as "qu↦" "†qu"; wp_pures.
   repeat (wp_apply (wp_store_offset with "qu↦") as "qu↦"; [by simplify_list_eq|]; wp_pures).
-  iEval (rewrite !array_cons !loc_add_assoc //) in "qu↦".
+  iEval (rewrite !array_cons !Loc.add_assoc //) in "qu↦".
   iDestruct "qu↦" as "(qu.h↦ & qu.t↦ & qu.d↦ & _)".
-  iMod (mapsto_persist with "qu.d↦") as "#qu.d↦".
+  iMod (pointsto_persist with "qu.d↦") as "#qu.d↦".
   iMod (alloc_node_resources 0) as (γ_s) "(#Idx_s & Reaped)".
   iMod (mono_list_own_alloc [(γ_s,s,#0)]) as (γcl) "[[●CL_T ●CL] #◯CL]".
   iDestruct (mono_list_idx_own_get 0 with "◯CL") as "Info_s"; [done|].
@@ -540,7 +540,7 @@ Proof using All.
   iAssert (node γcl n _ γ_n) with "[●CL_T]" as "N_n".
   { iExists (it1+1), x, None. iSplit; [done|]. iFrame "Idx_n Info_n". iLeft.
     iExists _. iFrame "●CL_T". iPureIntro. split; [done|].
-    rewrite app_length /=.
+    rewrite length_app /=.
     apply lookup_lt_Some in Hit. (* [length CL1 > 0] *) lia. }
   iMod (rcu.(rcu_domain_register) (node γcl) with "IED [$n↦ $†n $N_n]") as "G_n"; [solve_ndisj|].
 
@@ -551,7 +551,7 @@ Proof using All.
   iMod ("Commit" with "[●CL_Q ●ih_Q]") as "HΦ".
   { repeat iExists _. iFrame "∗#%". iPureIntro.
     subst xs CL1'. rewrite !fmap_drop fmap_app /=.
-    rewrite drop_app_le //. rewrite fmap_length.
+    rewrite drop_app_le //. rewrite length_fmap.
     destruct F1 as [?%lookup_fmap_lt_Some _]. lia. }
 
   iModIntro. iModIntro.
@@ -561,7 +561,7 @@ Proof using All.
   iDestruct (Zombies_insert _ ih1 it1 with "Zombies") as "Zombies".
   { destruct F1 as (Hih1 & _). clear -Hih1.  rewrite -list_lookup_fmap in Hih1.
     remember (lookup_lt_Some _ _ _ Hih1) as H. clear HeqH.
-    rewrite fmap_length in H. lia. }
+    rewrite length_fmap in H. lia. }
 
   (* close internal inv *)
   iSplitL "●CL_I qu.h↦ ●ih_I qu.t↦ ●it Nodes Zombies".
@@ -569,7 +569,7 @@ Proof using All.
     destruct F1 as (Hih1 & Hit1 & LE). split_and!.
     - eapply prefix_lookup_fmap; [done|by eexists].
     - eapply prefix_lookup_fmap; [done|by eexists].
-    - rewrite app_length. simpl. lia. }
+    - rewrite length_app. simpl. lia. }
   iSpecialize ("N_t" with "Idx_n Info_n").
   iModIntro. iSplitL "t↦ N_t". { iExists ([_;_]). by iFrame. }
   wp_pures.
@@ -636,13 +636,13 @@ Proof using All.
       destruct F1 as (?%lookup_fmap_lt_Some & _).
       destruct PF_CL12 as [L ->].
       rename select (_ < length CL1) into HL. clear -HL.
-      rewrite app_length in HL.
+      rewrite length_app in HL.
       assert (length L = 0) as ->%nil_length_inv by lia.
       by rewrite app_nil_r. }
     assert (xs2 = []) as ->.
     { subst ih2 xs2.
       destruct F2 as (_ & ?%lookup_fmap_lt_Some & _).
-      rewrite fmap_drop drop_ge //. rewrite fmap_length. lia. }
+      rewrite fmap_drop drop_ge //. rewrite length_fmap. lia. }
     (* Commit empty pop *)
     wp_apply (wp_load_offset with "h1↦") as "h1↦"; [by simplify_list_eq|].
     iMod ("Commit" with "[●CL_Q ●ih_Q]") as "HΦ"; first by exfr.
@@ -724,8 +724,8 @@ Proof using All.
       + intros i ?. by replace (ih4 + S i) with (ih4 + 1 + i) by lia.
       + by rewrite -Nat.add_1_r.
     - unfold Zombies. rewrite !fmap_take. replace (ih4 +1) with (S ih4) by lia. rewrite (take_S_r _ _ _ Hih4).
-      rewrite big_sepL_app. simpl. iFrame. iSplitL; try done. iExists false. iFrame. iRight.
-      rewrite take_length_le; last first.
+      rewrite big_sepL_app. simpl. iFrame. iRight.
+      rewrite length_take_le; last first.
       { remember (lookup_lt_Some _ _ _ Hih4) as Hl. clear HeqHl.
         remember (length CL4.*1) as l eqn: Eq. rewrite -Eq. lia. }
       rewrite Nat.add_0_r. iFrame.

@@ -10,8 +10,8 @@ From smr.diaframe.hints Require Import ghost_var_hints array_hints hazptr_hints.
 From smr Require Import helpers hazptr.spec_hazptr hazptr.spec_stack hazptr.code_treiber.
 
 Class treiberG Σ := TreiberG {
-  treiber_ghost_varG :> ghost_varG Σ (list val);
-  treiber_inG :> inG Σ (agreeR (prodO valO (optionO blkO)));
+  #[local] treiber_ghost_varG :: ghost_varG Σ (list val);
+  #[local] treiber_inG :: inG Σ (agreeR (prodO valO (optionO blkO)));
 }.
 
 Definition treiberΣ : gFunctors := #[ghost_varΣ (list val); GFunctor (agreeR (prodO valO (optionO blkO)))].

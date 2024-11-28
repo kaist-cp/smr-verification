@@ -8,8 +8,9 @@ From iris.prelude Require Import options.
 (** like ghost_map, but using coP_gmap_view instead of gmap_view *)
 
 Class coP_ghost_mapG Σ (K V : Type) `{Countable K} := CoPGhostMapG {
-  coP_ghost_map_inG :> inG Σ (coP_gmap_viewR K (leibnizO V));
+  #[local] coP_ghost_map_inG :: inG Σ (coP_gmap_viewR K (leibnizO V));
 }.
+
 Definition coP_ghost_mapΣ (K V : Type) `{Countable K} : gFunctors :=
   #[ GFunctor (coP_gmap_viewR K (leibnizO V)) ].
 

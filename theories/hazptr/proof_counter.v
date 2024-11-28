@@ -11,8 +11,8 @@ Set Printing Projections.
 Local Open Scope Z.
 
 Class counterG Σ := CounterG {
-  counter_inG :> inG Σ (agreeR ZO);
-  counter_ghost_varG :> ghost_varG Σ Z;
+  #[local] counter_inG :: inG Σ (agreeR ZO);
+  #[local] counter_ghost_varG :: ghost_varG Σ Z;
 }.
 
 Definition counterΣ : gFunctors := #[ghost_varΣ Z; GFunctor (agreeR ZO)].
@@ -57,11 +57,11 @@ Proof.
   wp_lam. wp_alloc c as "c↦" "†c". wp_let.
   simpl. rewrite array_cons array_singleton. iDestruct "c↦" as "[c.n↦ c.d↦]".
   wp_alloc p as "p↦" "†p". rewrite array_singleton.
-  wp_let. wp_store. wp_op. rewrite loc_add_0. wp_store.
+  wp_let. wp_store. wp_op. rewrite Loc.add_0. wp_store.
 
   wp_op.
   wp_store.
-  iMod (mapsto_persist with "c.d↦") as "#c.d↦".
+  iMod (pointsto_persist with "c.d↦") as "#c.d↦".
   iMod (own_alloc (to_agree 0)) as (γ_p) "#Hγ_p"; [done|].
   iMod (ghost_var_alloc 0) as (γc) "[Hγc Hγc']".
   remember (encode (γz, γc)) as γ eqn:Hγ.
@@ -88,7 +88,7 @@ Proof using All.
   wp_apply (hazptr.(shield_new_spec) with "IHD [//]") as (s) "S"; [solve_ndisj|].
   wp_let.
   wp_alloc n as "n↦" "†n". rewrite array_singleton.
-  wp_let. wp_op. rewrite loc_add_0.
+  wp_let. wp_op. rewrite Loc.add_0.
 
   (* start counter loop *)
   move: Deactivated {1}#0 => s_st vn.
@@ -102,9 +102,9 @@ Proof using All.
   1: instantiate (1 := [tele_arg (Some _); _; _; _]).
   all: simpl.
   { iFrame. }
-  { iIntros "(c.n↦ & G_p) !>". iSplitL "c.n↦ G_p Hγc"; [iExists _,_,_; by iFrame|iFrame]. }
-  iIntros "(c.n↦ & G_p & S) !>". iSplitL "c.n↦ G_p Hγc"; [iExists _,_,_; by iFrame|].
-  iIntros "_". wp_pures.
+  { iIntros "(c.n↦ & G_p) !>". iFrame "∗#". }
+  iIntros "(c.n↦ & G_p & S) !>". iSplitL "c.n↦ G_p Hγc"; [by iFrame|].
+  wp_pures.
 
   (* deref *)
   wp_apply (shield_read with "S") as (??) "(S & #Hγ_p1' & %EQ)"; [solve_ndisj|lia|].

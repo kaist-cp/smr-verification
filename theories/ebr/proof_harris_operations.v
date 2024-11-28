@@ -12,9 +12,9 @@ Set Printing Projections.
 Local Open Scope nat_scope.
 
 Class hlG Σ := HLG {
-  harris_list_absG :> ghost_varG Σ (list inf_Z);
-  harris_list_ptrs_allG :> ghost_mapG Σ positive (inf_Z * blk);
-  harris_list_ptrs_tagG :> ghost_mapG Σ positive (option (blk * positive) * bool);
+  #[export] harris_list_absG :: ghost_varG Σ (list inf_Z);
+  #[export] harris_list_ptrs_allG :: ghost_mapG Σ positive (inf_Z * blk);
+  #[export] harris_list_ptrs_tagG :: ghost_mapG Σ positive (option (blk * positive) * bool);
 }.
 
 Definition hlΣ : gFunctors := #[ghost_varΣ (list inf_Z); ghost_mapΣ positive (inf_Z * blk); ghost_mapΣ positive (option (blk * positive) * bool)].
@@ -50,7 +50,7 @@ Proof. iDestruct 1 as "[_ $]". Qed.
 Program Definition harris_type_pre γp_a γp_t γr (F : typeO Σ) : typeO Σ := {|
   ty_sz := nodeSize;
   ty_res (p : blk) lv i_p := ∃ (p_k : inf_Z) (p_on : option (blk * positive)) (p_t : Z),
-          ⌜lv = [ #((blk_to_loc <$> (fst <$> p_on)) &ₜ p_t); #p_k]⌝ ∗
+          ⌜lv = [ #((Loc.blk_to_loc <$> (fst <$> p_on)) &ₜ p_t); #p_k]⌝ ∗
           i_p ↪[γp_a]□ (p_k,p) ∗
           rcu.(RCUPointsTo) γr p i_p next ((λ p, (p,F)) <$> p_on) ∗
           ( (* Not tagged *)
@@ -81,7 +81,7 @@ Proof. by rewrite /harris_type {1}(type_fixpoint_unfold (harris_type_pre γp_a �
 Lemma harris_node_destruct γp_a γp_t γr p lv i_p :
   ▷ ty_res (harris_type γp_a γp_t γr) p lv i_p -∗
   ▷ ∃ (p_k : inf_Z) (p_on : option (blk * positive)) (p_t : Z),
-  ⌜lv = [ #((blk_to_loc <$> (fst <$> p_on)) &ₜ p_t); #p_k]⌝ ∗ i_p ↪[ γp_a ]□ (p_k, p) ∗
+  ⌜lv = [ #((Loc.blk_to_loc <$> (fst <$> p_on)) &ₜ p_t); #p_k]⌝ ∗ i_p ↪[ γp_a ]□ (p_k, p) ∗
   rcu.(RCUPointsTo) γr p i_p next ((λ p, (p, harris_type γp_a γp_t γr)) <$> p_on) ∗
   (⌜p_t = 0⌝ ∗ i_p ↪[γp_t]{#1 / 2} (p_on, false) ∨ ⌜p_t = 1⌝ ∗ i_p ↪[γp_t]□ (p_on, true)).
 Proof.
@@ -95,7 +95,7 @@ Lemma harris_node_destruct_agree γp_a γp_t γr p i_p (p_k : inf_Z) lv :
   ▷ i_p ↪[ γp_a ]□ (p_k, p) -∗
   ▷ ty_res (harris_type γp_a γp_t γr) p lv i_p -∗
   ▷ ∃ (p_on : option (blk * positive)) (p_t : Z),
-  ⌜lv = [ #((blk_to_loc <$> (fst <$> p_on)) &ₜ p_t); #p_k]⌝ ∗
+  ⌜lv = [ #((Loc.blk_to_loc <$> (fst <$> p_on)) &ₜ p_t); #p_k]⌝ ∗
   rcu.(RCUPointsTo) γr p i_p next ((λ p, (p, harris_type γp_a γp_t γr)) <$> p_on) ∗
   (⌜p_t = 0⌝ ∗ i_p ↪[γp_t]{#1 / 2} (p_on, false) ∨ ⌜p_t = 1⌝ ∗ i_p ↪[γp_t]□ (p_on, true)).
 Proof.
@@ -106,7 +106,7 @@ Proof.
 Qed.
 
 Lemma harris_node_combine_on γp_a γp_t γr (p : blk) i_p (p_k : inf_Z) (p_on : option (blk * positive)) p_t :
-  (blk_to_loc p) ↦∗ [ #((blk_to_loc <$> (fst <$> p_on)) &ₜ p_t); #p_k] -∗
+  (Loc.blk_to_loc p) ↦∗ [ #((Loc.blk_to_loc <$> (fst <$> p_on)) &ₜ p_t); #p_k] -∗
   i_p ↪[ γp_a ]□ (p_k, p) -∗
   ▷ rcu.(RCUPointsTo) γr p i_p next ((λ p, (p, harris_type γp_a γp_t γr)) <$> p_on) -∗
   (⌜p_t = 0⌝ ∗ i_p ↪[γp_t]{#1 / 2} (p_on, false) ∨ ⌜p_t = 1⌝ ∗ i_p ↪[γp_t]□ (p_on, true)) -∗
@@ -118,7 +118,7 @@ Proof.
 Qed.
 
 Lemma harris_node_combine_some γp_a γp_t γr (p : blk) i_p (p_k : inf_Z) (p_n : blk) (i_p_n : positive) p_t :
-  (blk_to_loc p) ↦∗ [ #((Some (blk_to_loc p_n)) &ₜ p_t); #p_k] -∗
+  (Loc.blk_to_loc p) ↦∗ [ #((Some (Loc.blk_to_loc p_n)) &ₜ p_t); #p_k] -∗
   i_p ↪[ γp_a ]□ (p_k, p) -∗
   ▷ rcu.(RCUPointsTo) γr p i_p next (Some (p_n,i_p_n,harris_type γp_a γp_t γr)) -∗
   (⌜p_t = 0⌝ ∗ i_p ↪[γp_t]{#1 / 2} (Some (p_n,i_p_n), false) ∨ ⌜p_t = 1⌝ ∗ i_p ↪[γp_t]□ (Some (p_n,i_p_n), true)) -∗
@@ -130,7 +130,7 @@ Proof.
 Qed.
 
 Definition AllPtrs p_all L γp_a γp_t : iProp :=
-  [∗ map] i_p ↦ kp ∈ p_all, let '(k,p) := kp in
+  [∗ map] i_p ↦ '(k,p) ∈ p_all,
     ((∃ (i_p_n : positive) (p_n : blk) (p_n_k : inf_Z),
       i_p ↪[γp_t]□ (Some (p_n,i_p_n), true) ∗ i_p_n ↪[γp_a]□ (p_n_k, p_n))
       ∨ ⌜(k, false, (p,i_p)) ∈ L⌝).
@@ -261,7 +261,7 @@ Lemma Nodes_combine L idx k b i_p p γp_a γp_t γr pn pp :
 Proof.
   iIntros (Hidx Hidx_next Hidx_prev) "Nodes M #i_p.k↪□ p.n↦". unfold Nodes,ListNode.
   iEval (rewrite big_sepL_delete; [|exact Hidx]). iFrame.
-  iExists pn,pp. by iFrame "∗#%".
+  by iFrame "∗#%".
 Qed.
 
 Lemma Nodes_rm_idx_remove L idx k b i_p p γp_a γp_t γr idx' :
@@ -304,7 +304,7 @@ Proof.
   iIntros (Hidx Hidx_next Hidx_prev NE) "Nodes M #i_p.k↪□ p.n↦". unfold Nodes_rm_idx,ListNode.
   iEval (rewrite big_sepL_delete; [|exact Hidx]).
   case_decide; [lia|]. iFrame.
-  iExists pn,pp. by iFrame "∗#%".
+  by iFrame "∗#%".
 Qed.
 
 Lemma get_persistent_AllPtrs p_all L i_p p k γp_a γp_t :
@@ -328,25 +328,25 @@ Definition harris_find_spec' (harris_find : val) : Prop :=
   (l +ₗ head) ↦□ #h -∗
   i_h ↪[ γp_a ]□ (-∞ᵢ, h) -∗
   inv listN (HListInternalInv h γp_a γp_t γl i_h γr) -∗
-  <<< ∀∀ (L : list inf_Z), HList γl L >>>
+  <<{ ∀∀ (L : list inf_Z), HList γl L }>>
     harris_find #l #d #k @ E, (↑listN ∪ (↑ptrsN rcuN)), ↑mgmtN rcuN
-  <<< ∃∃ (b : bool) (i_prev i_curr : positive) (idx : nat) (prev curr : blk) (prev_k curr_k : inf_Z),
+  <<{ ∃∃ (b : bool) (i_prev i_curr : positive) (idx : nat) (prev curr : blk) (prev_k curr_k : inf_Z),
       HList γl L ∗
       (* prev and curr are from the list. *)
       i_prev ↪[γp_a]□ (prev_k, prev) ∗ i_curr ↪[γp_a]□ (curr_k, curr) ∗
       ⌜L !! idx = Some prev_k ∧
       L !! (S idx) = Some curr_k ∧
       (* prev, c_prev_k and curr's key values are correct *)
-      (prev_k < k)%inf_Z ∧ if b then curr_k = k else (k < curr_k)%inf_Z⌝,
-      RET (#b, #prev, #curr),
+      (prev_k < k)%inf_Z ∧ if b then curr_k = k else (k < curr_k)%inf_Z⌝ |
+      RET (#b, #prev, #curr);
         rcu.(Guard) γr γg g ∗
         rcu.(RCUNodeInfo) γr γg prev i_prev (harris_type γp_a γp_t γr) ∗
         rcu.(RCUNodeInfo) γr γg curr i_curr (harris_type γp_a γp_t γr)
-      >>>.
+      }>>.
 
 Definition harris_find_au E γp_a γp_t γl γr (k : Z) g γg (Φ : val → iProp) : iProp :=
-  AU  << ∃∃ (L : list inf_Z), HList γl L >> @ E ∖ (↑listN ∪ (↑ptrsN rcuN)), ↑mgmtN rcuN
-      << ∀∀ (b : bool) (i_prev i_curr : positive) (idx : nat) (prev curr : blk) (prev_k curr_k : inf_Z),
+  AU  <{ ∃∃ (L : list inf_Z), HList γl L }> @ E ∖ (↑listN ∪ (↑ptrsN rcuN)), ↑mgmtN rcuN
+      <{ ∀∀ (b : bool) (i_prev i_curr : positive) (idx : nat) (prev curr : blk) (prev_k curr_k : inf_Z),
           HList γl L ∗
           (* prev and curr are from the list. *)
           i_prev ↪[γp_a]□ (prev_k, prev) ∗ i_curr ↪[γp_a]□ (curr_k, curr) ∗
@@ -357,7 +357,7 @@ Definition harris_find_au E γp_a γp_t γl γr (k : Z) g γg (Φ : val → iPro
           COMM ((rcu.(Guard) γr γg g ∗
                 rcu.(RCUNodeInfo) γr γg prev i_prev (harris_type γp_a γp_t γr) ∗
                 rcu.(RCUNodeInfo) γr γg curr i_curr (harris_type γp_a γp_t γr)) -∗
-                Φ (#b, #prev, #curr)%V) >>.
+                Φ (#b, #prev, #curr)%V) }>.
 
 Definition harris_helping_cas_spec' : Prop :=
   ∀ (committing : bool) Φ pr pr_v h γp_a γp_t γl i_h γr γg (d g : loc) (prev anchor curr : blk) p_k c_k i_p i_a i_c (k : Z) E,
@@ -436,8 +436,8 @@ Proof.
   wp_alloc l as "l↦" "†l". iClear "†l"; wp_pures.
   do 2 (wp_apply (wp_store_offset with "l↦") as "l↦"; [by simplify_list_eq|]; wp_pures). simpl in *.
   iMod (ghost_var_alloc [-∞ᵢ; ∞ᵢ]) as (γl) "[Labs Linv]".
-  iMod (ghost_map_alloc (∅ : gmap positive (inf_Z * blk))) as (γp_a) "[●p_all _]".
-  iMod (ghost_map_alloc (∅ : gmap positive (option (blk * positive) * bool))) as (γp_t) "[●p_tag _]".
+  iMod (ghost_map_alloc_empty (V:=inf_Z * blk)) as (γp_a) "●p_all".
+  iMod (ghost_map_alloc_empty (V:=option (blk * positive) * bool)) as (γp_t) "●p_tag".
   iApply "HΦ". iSplitR "Labs"; last first.
   { iFrame. iPureIntro. repeat constructor. }
 
@@ -473,23 +473,24 @@ Proof.
     iModIntro. iFrame "#". iEval (rewrite harris_type_unfold /=).
     iExists _,(Some (_,_)),_. simpl in *. iFrame "∗#%". iSplit; [done|]. iLeft. by iFrame.
   }
-  iDestruct "posM" as "[posM _]". rewrite (left_id ∅).
+  rewrite !(right_id _ (∗)%I) (left_id ∅).
 
-  iMod (array_persist with "l↦") as "l↦□".
-  iEval (rewrite array_cons array_singleton) in "l↦□". iDestruct "l↦□" as "[l.h↦□ l.d↦□]".
-  repeat iExists _. rewrite loc_add_0. iFrame "∗#%".
+  iMod (array_persist with "l↦") as "#l↦□".
+  iEval (rewrite array_cons array_singleton) in "l↦□".
+  iDestruct "l↦□" as "[l.h↦□ l.d↦□]".
+  repeat iExists _. rewrite Loc.add_0. iFrame "∗#%".
 
-  iMod (inv_alloc listN _ (HListInternalInv _ _ _ _ _ _ _ _) with "[Linv ●p_all ●p_tag negM neg.n↪ posM pos.n↪]") as "$"; [|done].
+  iApply inv_alloc.
   iNext. repeat iExists _.
   set (L := [(-∞ᵢ,false,(neg, i_neg));(∞ᵢ,false,(pos, i_pos))]).
   assert ([-∞ᵢ; ∞ᵢ] = get_abs_state L) as -> by done.
-  iFrame "∗#". rewrite big_sepL_nil. iSplitR; [|iSplit].
+  iFrame "∗#". rewrite big_sepL_nil (right_id _ (∗)%I). iSplitR; [|iSplit].
   - rewrite /AllPtrs big_sepM_insert; [|by simplify_map_eq].
     rewrite big_sepM_singleton. iSplit; iRight; iPureIntro.
     all: apply elem_of_list_lookup.
     + by exists 0.
     + by exists 1.
-  - iSplitL "neg.n↪ negM"; [|iSplit; [|done]].
+  - iSplitL "neg.n↪ negM".
     + iExists (Some (_,_)),None. iFrame. iPureIntro. by simplify_list_eq.
     + iExists None,(Some (_,_)). iFrame. iPureIntro. split_and!; [|lia|]; by simplify_list_eq.
   - iPureIntro. split_and!.
@@ -503,9 +504,9 @@ Lemma harris_lookup_spec E γp_a γp_t γl γr l g (k : Z) :
   ↑listN ∪ ↑rcuN ⊆ E →
   IsHList γp_a γp_t γl γr l -∗
   rcu.(Inactive) γr g -∗
-  <<< ∀∀ L, HList γl L >>>
+  <<{ ∀∀ L, HList γl L }>>
     (harris_lookup harris_find rcu) #l #g #k @ E,(↑listN ∪ (↑ptrsN rcuN)),↑mgmtN rcuN
-  <<< ∃∃ b, HList γl L ∗ ⌜lookup_post L b k⌝, RET #b, rcu.(Inactive) γr g >>>.
+  <<{ ∃∃ b, HList γl L ∗ ⌜lookup_post L b k⌝ | RET #b; rcu.(Inactive) γr g }>>.
 Proof using All.
   intros ?.
   iIntros "IsHarris G" (Φ) "AU". iDestruct "IsHarris" as (d h i_h) "#(l.d↦□ & l.h↦□ & h↪□ & IRD & IsHarris)".
@@ -528,16 +529,16 @@ Lemma harris_insert_spec E γp_a γp_t γl γr l g (k : Z) :
   ↑listN ∪ ↑rcuN ⊆ E →
   IsHList γp_a γp_t γl γr l -∗
   rcu.(Inactive) γr g -∗
-  <<< ∀∀ L, HList γl L >>>
+  <<{ ∀∀ L, HList γl L }>>
     (harris_insert harris_find rcu) #l #g #k @ E,(↑listN ∪ (↑ptrsN rcuN)),↑mgmtN rcuN
-  <<< ∃∃ (b : bool) L', HList γl L' ∗
+  <<{ ∃∃ (b : bool) L', HList γl L' ∗
       ⌜if b then
         insert_succ_post L L' k
       else
-        insert_fail_post L L' k⌝,
-      RET #b,
+        insert_fail_post L L' k⌝ |
+      RET #b;
       rcu.(Inactive) γr g
-      >>>.
+      }>>.
 Proof.
   intros ?.
   iIntros "#IsHarris G" (Φ) "AU". iDestruct "IsHarris" as (d h i_h) "#(l.d↦□ & l.h↦□ & h↪□ & IRD & IsHarris)".
@@ -653,7 +654,7 @@ Proof.
       iSplitR "PTRS".
       + iRight. iPureIntro. rewrite elem_of_list_lookup.
         exists (S idx_p). subst L'. unfold insert_middle_nbl. simpl.
-        rewrite lookup_app_r take_length_le; [|lia..].
+        rewrite lookup_app_r length_take_le; [|lia..].
         by rewrite Nat.sub_diag.
       + iApply (big_sepM_mono with "PTRS").
         iIntros (i_l' [k' l'] H_ptrs_l) "l'".
@@ -666,11 +667,11 @@ Proof.
         * right. apply elem_of_app. by right.
     - iSplitL; last first.
       { iPureIntro. split_and!; [done|..].
-        - subst L'. unfold insert_middle_nbl. rewrite lookup_app_l; [|rewrite take_length_le; lia].
+        - subst L'. unfold insert_middle_nbl. rewrite lookup_app_l; [|rewrite length_take_le; lia].
           rewrite lookup_take; [done|lia].
         - destruct HLt as [t HLt]. exists t.
-          subst L'. unfold insert_middle_nbl. rewrite !app_length drop_length take_length_le; [|lia].
-          rewrite /= Nat.sub_0_r lookup_app_r take_length_le; [|lia..].
+          subst L'. unfold insert_middle_nbl. rewrite !length_app length_drop length_take_le; [|lia].
+          rewrite /= Nat.sub_0_r lookup_app_r length_take_le; [|lia..].
           rewrite lookup_cons_ne_0; [|lia]. rewrite lookup_drop -HLt. f_equal. lia.
         - rewrite dom_insert_L Hdom dom_insert_lookup_L; last first.
           { rewrite -elem_of_dom dom_insert_L -Hdom. apply elem_of_union_r,elem_of_dom. eauto. }
@@ -685,7 +686,7 @@ Proof.
       rewrite (drop_S _ ((c_k, b, (c, i_c)))); [|rewrite -HLc; f_equal; lia]. simpl in *.
       iDestruct "NodesDrop" as "[_ NodesDrop]".
       assert (idx_p <= length L) by lia.
-      rewrite !Nat.add_0_r !take_length_le /=; [|lia|done].
+      rewrite !Nat.add_0_r !length_take_le /=; [|lia|done].
       iSplitL "NodesTake p.n↪ pM"; [iSplitR "p.n↪ pM"|iSplitL "n.n↪ nM"; [|iSplitR "NodesDrop"]].
       + iApply (big_sepL_mono with "NodesTake"); iIntros (idx' [[z' b'] [l' i_l']] Hidx') "idx'".
         apply lookup_take_Some in Hidx' as [_ LE].
@@ -693,7 +694,7 @@ Proof.
         iDestruct "idx'" as (on op) "(l'M & $ & l'.n↦ & %HLl'_n & %HLl'_p)".
         iExists on,op. iFrame. iPureIntro.
         assert (idx' + 1 < length (take (S idx_p) L.*2)).
-        { rewrite take_length_le; [lia|]. rewrite fmap_length. lia. }
+        { rewrite length_take_le; [lia|]. rewrite length_fmap. lia. }
         rewrite !fmap_app /= fmap_take !lookup_app_l; [|lia..].
         split.
         * rewrite -(take_drop (S idx_p) L) fmap_app lookup_app_l fmap_take in HLl'_n; done.
@@ -701,27 +702,27 @@ Proof.
           destruct HLl'_p as [? HLl'_p]. split; [done|].
           rewrite -(take_drop (S idx_p) L) fmap_app lookup_app_l fmap_take in HLl'_p; [done|lia].
       + iSplit; [|done]. iExists (Some (n,i_n)),p_p. iFrame "∗#". iPureIntro. subst L'.
-        rewrite !fmap_app lookup_app_r /= fmap_length take_length_le; [|lia..].
+        rewrite !fmap_app lookup_app_r /= length_fmap length_take_le; [|lia..].
         rewrite Nat.add_1_r Nat.sub_diag. split; [done|].
         destruct p_p as [[p_p i_p_p]|]; simpl in *; [|done]. destruct HLp_p as [? HLp_p].
         split; [done|]. rewrite fmap_take lookup_app_l; last first.
-        { rewrite take_length_le; [|rewrite fmap_length]; lia. }
+        { rewrite length_take_le; [|rewrite length_fmap]; lia. }
         rewrite lookup_take; [done|lia].
       + iSplit; [|done]. iExists (Some (c,i_c)),(Some (p,i_p)). iFrame "∗#". iPureIntro. subst L'.
-        rewrite !fmap_app lookup_app_r /= fmap_length take_length_le; try lia.
+        rewrite !fmap_app lookup_app_r /= length_fmap length_take_le; try lia.
         rewrite /= lookup_cons_ne_0; [|lia]. get_third HLc. rewrite /= fmap_drop lookup_drop -HLc.
         split_and!; [f_equal;lia|lia|]. rewrite fmap_take lookup_app_l; last first.
-        { rewrite take_length_le; [|rewrite fmap_length]; lia. }
+        { rewrite length_take_le; [|rewrite length_fmap]; lia. }
         rewrite Nat.sub_0_r lookup_take; [|lia]. by get_third HLp.
       + iExists c_n,(Some (n,i_n)). iFrame "∗#". iPureIntro. subst L'.
-        rewrite !fmap_app !(lookup_app_r (take (S idx_p) L).*2) /= !fmap_length !take_length_le; try lia.
+        rewrite !fmap_app !(lookup_app_r (take (S idx_p) L).*2) /= !length_fmap !length_take_le; try lia.
         rewrite /= lookup_cons_ne_0; [|lia]. rewrite fmap_drop lookup_drop -HLc_n.
         split_and!; [f_equal;lia|lia|]. by rewrite Nat.add_1_r Nat.sub_0_r Nat.sub_diag.
       + iApply (big_sepL_mono with "NodesDrop"). iIntros (idx' [[z' b'] [l' i_l']] Hidx') "idx'".
         repeat (case_decide; [lia|]).
         iDestruct "idx'" as (on op) "(l'M & $ & l'.n↦ & %HLl'_n & %HLl'_p)".
         iExists on,op. iFrame. iPureIntro.
-        rewrite !fmap_app !lookup_app_r /= fmap_length take_length_le /=; try lia.
+        rewrite !fmap_app !lookup_app_r /= length_fmap length_take_le /=; try lia.
         rewrite !fmap_drop !lookup_drop -HLl'_n. split; [f_equal; lia|].
         destruct op as [[op i_op]|]; [|lia]. destruct HLl'_p as [_ HLl'_p].
         split; [lia|]. rewrite -HLl'_p. f_equal. lia.
@@ -736,16 +737,16 @@ Lemma harris_delete_spec E γp_a γp_t γl γr l g (k : Z) :
   ↑listN ∪ ↑rcuN ⊆ E →
   IsHList γp_a γp_t γl γr l -∗
   rcu.(Inactive) γr g -∗
-  <<< ∀∀ L, HList γl L >>>
+  <<{ ∀∀ L, HList γl L }>>
     (harris_delete harris_find rcu) #l #g #k @ E,(↑listN ∪ (↑ptrsN rcuN)),↑mgmtN rcuN
-  <<< ∃∃ (b : bool) L', HList γl L' ∗
+  <<{ ∃∃ (b : bool) L', HList γl L' ∗
       ⌜if b then
         delete_succ_post L L' k
       else
-        delete_fail_post L L' k⌝,
-      RET #b,
+        delete_fail_post L L' k⌝ |
+      RET #b;
       rcu.(Inactive) γr g
-      >>>.
+      }>>.
 Proof.
   intros ?.
   iIntros "#IsHarris G" (Φ) "AU". iDestruct "IsHarris" as (d h i_h) "#(l.d↦□ & l.h↦□ & h↪□ & IRD & IsHarris)".
@@ -866,7 +867,7 @@ Proof.
         iExists on,op. iFrame. iPureIntro. rewrite list_fmap_insert /=.
         destruct (decide (idx_c = i' + 1)) as [->|NE].
         { get_third HLc. simplify_list_eq. split.
-          - rewrite list_lookup_insert; [done|]. rewrite fmap_length. done.
+          - rewrite list_lookup_insert; [done|]. rewrite length_fmap. done.
           - destruct op as [[??]|]; simpl in *; [|done]. destruct HLp'_p as [? HLp'_p].
             split; [done|]. rewrite list_lookup_insert_ne; [done|lia].
         }
@@ -874,25 +875,25 @@ Proof.
         * rewrite list_lookup_insert_ne; [done|lia].
         * destruct op as [[??]|]; simpl in *; [|done]. destruct HLp'_p as [? HLp'_p].
           split; [done|]. rewrite list_lookup_insert_ne; [done|lia].
-      + rewrite take_length_le; last first.
+      + rewrite length_take_le; last first.
         { apply lookup_lt_Some in HLc. lia. }
         case_decide; naive_solver.
       + iApply (big_sepL_mono with "NodesDrop").
         iIntros (i' [[z' b'] [γp' p']] Hi') "p'".
-        rewrite take_length_le; [|lia]. case_decide; [lia|].
+        rewrite length_take_le; [|lia]. case_decide; [lia|].
         iDestruct "p'" as (on op) "(p'M & $ & p'.n↦ & %HLp'_n & %HLp'_p)".
         iExists on,op. iFrame. iPureIntro.
         rewrite list_fmap_insert /= list_lookup_insert_ne; [|lia]. split; [done|].
         destruct op as [[??]|]; simpl in *; [|done]. destruct HLp'_p as [? HLp'_p].
         split; [done|].
         destruct (decide (i' = 0)) as [->|NE].
-        { rewrite Nat.add_1_r Nat.sub_1_r /= list_lookup_insert; [|rewrite fmap_length; lia].
+        { rewrite Nat.add_1_r Nat.sub_1_r /= list_lookup_insert; [|rewrite length_fmap; lia].
           get_third HLc. rewrite -HLp'_p -HLc. f_equal. lia.
         }
         rewrite list_lookup_insert_ne; [done|lia].
     - iPureIntro. subst L'. split_and!; [done|..].
       + rewrite list_lookup_insert_ne; [done|]. intros ->. naive_solver.
-      + destruct HLt as [t HLt]. exists t. rewrite insert_length.
+      + destruct HLt as [t HLt]. exists t. rewrite length_insert.
         rewrite list_lookup_insert_ne; [done|]. intros ->. naive_solver.
       + rewrite dom_insert_lookup_L; [done|].
         rewrite -elem_of_dom -Hdom elem_of_dom. eauto.

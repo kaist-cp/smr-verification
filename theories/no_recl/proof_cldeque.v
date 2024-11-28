@@ -11,9 +11,9 @@ From smr Require Import helpers.
 Local Ltac extended_auto :=
   eauto;
   try rewrite Nat2Z.id;
-  try rewrite replicate_length;
+  try rewrite length_replicate;
   try rewrite Qp.half_half;
-  repeat rewrite loc_add_0; repeat rewrite loc_add_assoc;
+  repeat rewrite Loc.add_0; repeat rewrite Loc.add_assoc;
   try by (
     repeat iNext; repeat iIntros; repeat intros;
     try case_decide; try iPureIntro;
@@ -30,14 +30,14 @@ Local Ltac fr :=
 
 Class cldequeG Σ := CLDequeG {
     (* spec *)
-    deque_tokG :> inG Σ (excl_authR $ listO valO);
+    #[local] deque_tokG :: inG Σ (excl_authR $ listO valO);
     (* info: era, arrptr, C, bot, popping *)
-    deque_infoG :> ghost_varG Σ (nat * blk * list val * nat * bool);
+    #[local] deque_infoG :: ghost_varG Σ (nat * blk * list val * nat * bool);
     (* RA *)
-    topbotG :> mono_natG Σ;
-    topeltG :> mono_listG val Σ;
-    roomG :> mono_listG (gname * blk * nat) Σ;
-    museumG :> mono_listG (list val * nat * nat) Σ
+    #[local] topbotG :: mono_natG Σ;
+    #[local] topeltG :: mono_listG val Σ;
+    #[local] roomG :: mono_listG (gname * blk * nat) Σ;
+    #[local] museumG :: mono_listG (list val * nat * nat) Σ
   }.
 
 Definition cldequeΣ : gFunctors :=
@@ -182,7 +182,7 @@ Section dqst.
     iMod (mono_list_own_alloc ([] : list (list val * nat * nat))) as (γmus) "[museum _]".
     iExists (γtb, γelt, γroom, γmus).
     iModIntro. fr. fr.
-    iSplitL "topelt"; fr. fr.
+    iSplit; fr.
   Qed.
 
   Lemma dqst_frag_agree γdqst era C1 l1 t1 b1 C2 l2 t2 b2 :
@@ -244,7 +244,7 @@ Section dqst.
       eapply prefix_lookup_Some in Hroom'2; eauto.
     assert (era2 < era1) as Hera21.
     { apply lookup_lt_Some in Hroom'2.
-      rewrite app_length Hroomlen in Hroom'2. simpl in Hroom'2... }
+      rewrite length_app Hroomlen in Hroom'2. simpl in Hroom'2... }
     assert (is_Some (museum !! era2)) as [ltbera2 Hltbera2].
     { rewrite lookup_lt_is_Some... }
     rewrite lookup_app_l in Hroom'2...
@@ -364,7 +364,7 @@ Section dqst.
     destruct (mod_get_is_Some l (S t)) as [v Hv]...
     iMod (mono_list_auth_own_update_app [v] with "Elts") as "[Elts _]".
     iModIntro. fr. fr. do 2 case_bool_decide...
-    rewrite app_length lookup_app_r; simpl...
+    rewrite length_app lookup_app_r; simpl...
     replace (S t - length elts) with 0; simpl... fr.
   Qed.
 
@@ -385,11 +385,11 @@ Section dqst.
     { unfold top_bot_state. do 2 case_bool_decide... }
 
     case_bool_decide; last first.
-    { iModIntro. fr. fr. case_bool_decide... }
+    { iModIntro. fr. fr. }
     destruct (mod_get_is_Some l t) as [v Hv]...
     iMod (mono_list_auth_own_update_app [v] with "Elts") as "[Elts _]".
     iModIntro. fr. fr. case_bool_decide...
-    rewrite app_length lookup_app_r; simpl...
+    rewrite length_app lookup_app_r; simpl...
     replace (t - length elts) with 0; simpl... fr.
   Qed.
 
@@ -444,8 +444,7 @@ Section dqst.
 
     (* frame *)
     iModIntro. fr. fr.
-    iSplitL "Elts".
-    { fr. case_bool_decide... fr.
+    { case_bool_decide... fr.
       destruct Heltslen as [_ Hget].
       apply (circ_slice_split_eq (S t)) in Heqs as [Heqs _]...
       destruct (circ_slice_singleton l t) as [x [Hx Hsx]]...
@@ -453,13 +452,12 @@ Section dqst.
       rewrite Hsx Hsy in Heqs. injection Heqs as [= <-].
       rewrite Hy -Hget Hx...
     }
-    fr. fr.
-    { rewrite app_length -Hproomlen. simpl... }
-    { rewrite app_length -Hmuslen. simpl... }
+    { rewrite length_app -Hproomlen. simpl... }
+    { rewrite length_app -Hmuslen. simpl... }
     simpl. fr. all: fr.
     - case_bool_decide... iRight. destruct Heltslen...
     - rewrite lookup_app_l...
-      2: rewrite app_length; simpl...
+      2: rewrite length_app; simpl...
       rewrite lookup_app_r...
       replace (length proom + 0 - length proom) with 0...
     - rewrite lookup_app_r...
@@ -542,7 +540,7 @@ Section proof.
     iDestruct "A" as "[A1 A2]".
 
     (* make resources *)
-    iMod (mapsto_persist with "Sz") as "#Sz".
+    iMod (pointsto_persist with "Sz") as "#Sz".
     iMod (own_alloc (●E [] ⋅ ◯E [])) as (γq) "[γq● γq◯]". 1: apply excl_auth_valid.
     iMod (ghost_var_alloc (0, C, (replicate n #0), 1, false)) as (γera) "[Era1 Era2]".
     iMod (dqst_auth_alloc C (replicate n #0)) as (γdqst) "Auth"...
@@ -561,15 +559,15 @@ Section proof.
     0 < n < m →
     t ≤ b < t + n →
     arr' ↦∗ l' -∗
-    <<< ∀∀ (_ : ()), arr ↦∗ l >>>
-      circle_grow_rec #arr #n #arr' #m #t #b @ ∅
-    <<< ∃∃ (l2' : list val),
+    <<{ ∀∀ (_ : ()), arr ↦∗ l }>>
+      circle_grow_rec #arr #n #arr' #m #t #b @ ⊤,∅,∅
+    <<{ ∃∃ (l2' : list val),
       ⌜length l2' = m⌝ ∗
       ⌜circ_slice l t b = circ_slice l2' t b⌝ ∗
       ⌜∀ i, b ≤ i < t + length l → mod_get l' i = mod_get l2' i⌝ ∗
-      arr ↦∗ l,
-      RET #(), arr' ↦∗ l2'
-    >>>.
+      arr ↦∗ l |
+      RET #(); arr' ↦∗ l2'
+    }>>.
   Proof with extended_auto.
     iIntros "%Hn %Hm %Hlen %Hlt A'" (Φ) "AU".
       iRevert "A' AU". iRevert (b l' Hm Hlt).
@@ -604,7 +602,7 @@ Section proof.
 
     (* recurse *)
     iApply ("IH" $! b (<[b `mod` m:=v]> l') with "[] [] [A']")...
-      1: rewrite insert_length...
+      1: rewrite length_insert...
     iAuIntro.
     rewrite /atomic_acc /=.
       iMod "AU" as (_) "[Cont AC]".
@@ -623,10 +621,10 @@ Section proof.
         all: replace (S b - 1) with b...
         + rewrite Heqs...
         + rewrite -Hlast... unfold mod_get.
-          rewrite insert_length Hm list_lookup_insert...
+          rewrite length_insert Hm list_lookup_insert...
           rewrite Hm. apply Nat.mod_upper_bound...
       - intros i Hi. rewrite -Hlast... unfold mod_get.
-        rewrite insert_length Hm list_lookup_insert_ne...
+        rewrite length_insert Hm list_lookup_insert_ne...
         apply close_mod_neq...
     }
     iIntros "!> A'". iApply "HΦ"...
@@ -636,14 +634,14 @@ Section proof.
     0 < length l →
     t ≤ b < t + length l →
     (C +ₗ csz) ↦□ #(length l) -∗
-    <<< ∀∀ (_ : ()), (C +ₗ carr) ↦∗ l >>>
-      circle_grow #C #t #b @ ∅
-    <<< ∃∃ (C' : blk) (l' : list val),
+    <<{ ∀∀ (_ : ()), (C +ₗ carr) ↦∗ l }>>
+      circle_grow #C #t #b @ ⊤,∅,∅
+    <<{ ∃∃ (C' : blk) (l' : list val),
       ⌜length l < length l'⌝ ∗
       ⌜circ_slice l t b = circ_slice l' t b⌝ ∗
-      (C +ₗ carr) ↦∗ l,
-    RET #C',
-      (C' +ₗ csz) ↦ #(length l') ∗ (C' +ₗ carr) ↦∗ l' >>>.
+      (C +ₗ carr) ↦∗ l |
+      RET #C';
+      (C' +ₗ csz) ↦ #(length l') ∗ (C' +ₗ carr) ↦∗ l' }>>.
   Proof with extended_auto.
     iIntros "%Hlen %Hlt Sz" (Φ) "AU".
     wp_lam. wp_pures. wp_load. wp_pures.
@@ -740,7 +738,7 @@ Section proof.
       iApply "HΦ".
         iExists γq, γera, γdqst.
         iExists era, (mod_set l b v), C, (S b).
-        rewrite -HeqCarr insert_length. fr.
+        rewrite -HeqCarr length_insert. fr.
     - (* X. grow *)
       wp_bind (circle_grow _ _ _)%E.
       awp_apply (circle_grow_spec with "[Sz]")... all: try lia.
@@ -756,7 +754,7 @@ Section proof.
       iModIntro. iSplitL "● Era Dqst C A T B".
       { iExists _,_,l. fr. rewrite -HeqCarr. fr. }
       iIntros "(SzOwn & AX)". wp_pures...
-        iMod (mapsto_persist with "SzOwn") as "#SzX".
+        iMod (pointsto_persist with "SzOwn") as "#SzX".
         replace (CX +ₗ 1) with (CX +ₗ Z.of_nat 1)...
         remember (CX +ₗ Z.of_nat 1) as CXarr.
 
@@ -826,7 +824,7 @@ Section proof.
         rewrite -HeqCXarr. fr. }
       iApply "HΦ".
         iExists γq, γera, γdqst.
-        iExists (S era), (mod_set lX b v). fr. fr. rewrite insert_length...
+        iExists (S era), (mod_set lX b v). fr. fr. rewrite length_insert...
         rewrite -HeqCXarr. fr.
     Unshelve. done.
   Qed.
@@ -1044,7 +1042,7 @@ Section proof.
     case_bool_decide as Hif; wp_pures.
     { iMod "AU" as (l) "[Cont [_ Commit]]".
       iMod ("Commit" $! l NONEV with "[Cont]") as "Φ"...
-      iApply "Φ"... }
+    }
     assert (t1 < b2) as Htb12. 1: destruct pop2...
 
     (* 4. get_circle *)
@@ -1100,7 +1098,7 @@ Section proof.
           with "● ◯") as "[● ◯]".
         iMod (dqst_auth_update with "Dqst") as "Dqst"...
       iMod ("Commit" $! (circ_slice l5 (S t1) b5) (SOMEV v)
-        with "[◯]") as "HΦ"; fr.
+        with "[◯]") as "HΦ"; first fr.
       iModIntro. iSplitL "● Era Dqst C A T B".
       { iExists _,_,l5. fr. fr. }
       wp_pures. iApply "HΦ"...
@@ -1155,7 +1153,7 @@ Section proof.
           with "● ◯") as "[● ◯]".
         iMod (dqst_auth_update with "Dqst") as "Dqst"...
       iMod ("Commit" $! (circ_slice l5 (S t1) b5) (SOMEV v)
-        with "[◯]") as "HΦ"; fr.
+        with "[◯]") as "HΦ"; first fr.
       iModIntro. iSplitL "● Era Dqst C A T B".
       { iExists _,_,l5. fr. fr. }
       wp_pures. iApply "HΦ"...
@@ -1164,4 +1162,3 @@ Section proof.
 #[export] Typeclasses Opaque Deque IsDeque.
 
 End proof.
-

@@ -186,7 +186,7 @@ Proof using All.
   { iNext.
     awp_apply (treiber.(spec_stack.stack_push_spec) $! _ _ _ _ #10 with "IS G").
     iInv "SInv" as (xs) ">S". iAaccIntro with "S".
-    { iIntros "S !>". iFrame. eauto. }
+    { iIntros "S !>". iFrame. }
     iIntros "S !>". iSplitL "S"; [eauto|].
     iIntros "G". wp_seq.
     awp_apply (treiber.(spec_stack.stack_pop_spec) with "IS G").
@@ -200,7 +200,7 @@ Proof using All.
   wp_seq.
   awp_apply (treiber.(spec_stack.stack_push_spec) $! _ _ _ _ #10 with "IS G'").
   iInv "SInv" as (xs) ">S". iAaccIntro with "S".
-  { iIntros "S !>". iFrame. eauto. }
+  { iIntros "S !>". iFrame. }
   iIntros "S !>". iSplitL "S"; [eauto|].
   iIntros "G'". wp_seq.
   awp_apply (treiber.(spec_stack.stack_pop_spec) with "IS G'").

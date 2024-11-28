@@ -17,11 +17,6 @@ def count_coqwc_lines(ds_file):
     res_proof = []
 
     for recl in ["no_recl", "hazptr", "ebr"]:
-        if ds_file["name"] == "Harris Set" and recl == "hazptr":
-            res_code += [0]
-            res_proof += [0]
-            continue
-
         code_count = 0
         for code in ds_file["code"]:
             lines = subprocess.check_output(
@@ -131,18 +126,11 @@ if __name__ == "__main__":
         with open("line_count.tsv", "a") as f:
             f.write(ds_file["name"] + "\t" + "\t".join(res) + "\n")
 
-    (harris_code, harris_proof) = count_coqwc_lines(harris_files)
     total_code_str = list(map(format_com, total_code))
     total_proof_str = list(map(format_com, total_proof))
 
     total_code_str[2] += str_ratio(2, total_code)
     total_proof_str[2] += str_ratio(2, total_proof)
-
-    total_code[0] -= harris_code[0]
-    total_proof[0] -= harris_proof[0]
-
-    total_code_str[0] = f"{total_code[0]:,}" + " " + total_code_str[0]
-    total_proof_str[0] = f"{total_proof[0]:,}" + " " + total_proof_str[0]
 
     total_code_str[1] += str_ratio(1, total_code)
     total_proof_str[1] += str_ratio(1, total_proof)

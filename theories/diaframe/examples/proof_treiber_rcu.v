@@ -11,8 +11,8 @@ From diaframe Require Import own_hints.
 From smr Require Import helpers ebr.spec_rcu_simple ebr.spec_stack ebr.code_treiber.
 
 Class treiberG Σ := TreiberG {
-  treiber_ghost_varG :> ghost_varG Σ (list val);
-  treiber_inG :> inG Σ (agreeR (prodO valO (optionO blkO)));
+  #[local] treiber_ghost_varG :: ghost_varG Σ (list val);
+  #[local] treiber_inG :: inG Σ (agreeR (prodO valO (optionO blkO)));
 }.
 
 Definition treiberΣ : gFunctors := #[ghost_varΣ (list val); GFunctor (agreeR (prodO valO (optionO blkO)))].

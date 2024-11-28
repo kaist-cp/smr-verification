@@ -38,8 +38,8 @@ Definition hmsN := nroot .@ "hmsN".
 Lemma DISJN : rcu_mgmtN ## rcu_ptrsN. Proof. solve_ndisj. Qed.
 
 Class rcu_base_implG Σ := RCUBaseImplG {
-  rcu_base_impl_ebrG :> ebrG Σ;
-  rcu_base_impl_slot_bag :> slot_bag_onatG Σ;
+  #[local] rcu_base_impl_ebrG :: ebrG Σ;
+  #[local] rcu_base_impl_slot_bag :: slot_bag_onatG Σ;
 }.
 
 Definition rcu_base_implΣ : gFunctors := #[ebrΣ; slot_bag_onatΣ].
@@ -49,7 +49,7 @@ Global Instance subG_rcu_base_implΣ {Σ} :
 Proof. solve_inG. Qed.
 
 Class rcu_simple_implG Σ := RCUSimpleImplG {
-  rcu_simple_impl_baseG :> rcu_base_implG Σ;
+  #[local] rcu_simple_impl_baseG :: rcu_base_implG Σ;
 }.
 
 Definition rcu_simple_implΣ : gFunctors := #[rcu_base_implΣ].
@@ -59,8 +59,8 @@ Global Instance subG_simple_implΣ {Σ} :
 Proof. solve_inG. Qed.
 
 Class rcu_traversal_implG Σ := RCUTraversalImplG {
-  rcu_tarversal_impl_baseG :> rcu_base_implG Σ;
-  rcu_tarversal_implG :> rcu_traversalG Σ;
+  #[local] rcu_tarversal_impl_baseG :: rcu_base_implG Σ;
+  #[local] rcu_tarversal_implG :: rcu_traversalG Σ;
 }.
 
 Definition rcu_traversal_implΣ : gFunctors := #[rcu_base_implΣ; rcu_traversalΣ].

@@ -68,7 +68,7 @@ behavior. So we erase to the poison value instead, making sure that no legal
 comparisons could be affected. *)
 Inductive base_lit : Set :=
   | LitInt (n : inf_Z) | LitBool (b : bool) | LitUnit | LitPoison
-  | LitLoc (l : tagged_loc) | LitProphecy (p: proph_id).
+  | LitLoc (l : Loc.tagged_loc) | LitProphecy (p: proph_id).
 Inductive un_op : Set :=
   | NegOp | MinusUnOp | LoadTagOp.
 Inductive bin_op : Set :=
@@ -82,13 +82,13 @@ Inductive bin_op : Set :=
   | OffsetOp | TagOp. (* Pointer arithmatic *)
 
 Definition oloc_to_lit (lopt : option loc) : base_lit :=
-  LitLoc (TLoc lopt 0%Z).
+  LitLoc (Loc.to_tagged_loc lopt 0%Z).
 
 Global Instance oloc_to_lit_inj : Inj (=) (=) oloc_to_lit.
 Proof. intros [] []; simpl; naive_solver. Qed.
 
 Definition oblk_to_lit (lopt : option blk) : base_lit :=
-  oloc_to_lit $ blk_to_loc <$> lopt.
+  oloc_to_lit $ Loc.blk_to_loc <$> lopt.
 
 Global Instance oblk_to_lit_inj : Inj (=) (=) oblk_to_lit.
 Proof. intros ??; simpl; naive_solver. Qed.
@@ -162,7 +162,7 @@ Definition to_val (e : expr) : option val :=
   | _ => None
   end.
 
-(** We assume the following encoding of values to 64-bit words: The least 3
+(** We assume the following encoding of values to 64-bit String.words: The least 3
 significant bits of every word are a "tag", and we have 61 bits of payload,
 which is enough if all pointers are 8-byte-aligned (common on 64bit
 architectures). The tags have the following meaning:
@@ -544,7 +544,7 @@ Definition un_op_eval (op : un_op) (v : val) : option val :=
   | NegOp, LitV (LitBool b) => Some $ LitV $ LitBool (negb b)
   | NegOp, LitV (LitInt (FinInt n)) => Some $ LitV $ LitInt $ FinInt (Z.lnot n)
   | MinusUnOp, LitV (LitInt (FinInt n)) => Some $ LitV $ LitInt $ FinInt (- n)
-  | LoadTagOp, LitV (LitLoc (TLoc _ tag)) => Some $ LitV $ LitInt $ FinInt tag
+  | LoadTagOp, LitV (LitLoc (Loc.TLoc _ tag)) => Some $ LitV $ LitInt $ FinInt tag
   | _, _ => None
   end.
 
@@ -579,10 +579,12 @@ Definition bin_op_eval_bool (op : bin_op) (b1 b2 : bool) : option base_lit :=
   | OffsetOp | TagOp => None (* Pointer arithmetic *)
   end.
 
-Definition bin_op_eval_loc (op : bin_op) (l1 : tagged_loc) (v2 : base_lit) : option base_lit :=
+Definition bin_op_eval_loc (op : bin_op) (l1 : Loc.tagged_loc) (v2 : base_lit) : option base_lit :=
   match l1, op, v2 with
-  | (TLoc (Some l1) tag), OffsetOp, LitInt (FinInt off) => Some $ LitLoc $ TLoc (Some (l1 +ₗ off)) tag
-  | (TLoc l1 _), TagOp, LitInt (FinInt tag) => Some $ LitLoc $ TLoc l1 tag
+  | (Loc.TLoc (Some l1) tag), OffsetOp, LitInt (FinInt off) =>
+    Some $ LitLoc $ Loc.to_tagged_loc (Some (l1 +ₗ off)) tag
+  | (Loc.TLoc l1 _), TagOp, LitInt (FinInt tag) =>
+    Some $ LitLoc $ Loc.to_tagged_loc l1 tag
   | _, _, _ => None
   end.
 
@@ -621,63 +623,63 @@ Fixpoint free_mem (l:loc) (n:nat) (m:memory) : memory :=
   | S n => delete l (free_mem (l +ₗ 1) n m)
   end.
 
-Inductive head_step : expr → state → list observation → expr → state → list expr → Prop :=
+Inductive base_step : expr → state → list observation → expr → state → list expr → Prop :=
   | RecS f x e σ :
-     head_step (Rec f x e) σ [] (Val $ RecV f x e) σ []
+     base_step (Rec f x e) σ [] (Val $ RecV f x e) σ []
   | PairS v1 v2 σ :
-     head_step (Pair (Val v1) (Val v2)) σ [] (Val $ PairV v1 v2) σ []
+     base_step (Pair (Val v1) (Val v2)) σ [] (Val $ PairV v1 v2) σ []
   | InjLS v σ :
-     head_step (InjL $ Val v) σ [] (Val $ InjLV v) σ []
+     base_step (InjL $ Val v) σ [] (Val $ InjLV v) σ []
   | InjRS v σ :
-     head_step (InjR $ Val v) σ [] (Val $ InjRV v) σ []
+     base_step (InjR $ Val v) σ [] (Val $ InjRV v) σ []
   | BetaS f x e1 v2 e' σ :
      e' = subst' x v2 (subst' f (RecV f x e1) e1) →
-     head_step (App (Val $ RecV f x e1) (Val v2)) σ [] e' σ []
+     base_step (App (Val $ RecV f x e1) (Val v2)) σ [] e' σ []
   | UnOpS op v v' σ :
      un_op_eval op v = Some v' →
-     head_step (UnOp op (Val v)) σ [] (Val v') σ []
+     base_step (UnOp op (Val v)) σ [] (Val v') σ []
   | BinOpS op v1 v2 v' σ :
      bin_op_eval op v1 v2 = Some v' →
-     head_step (BinOp op (Val v1) (Val v2)) σ [] (Val v') σ []
+     base_step (BinOp op (Val v1) (Val v2)) σ [] (Val v') σ []
   | IfTrueS e1 e2 σ :
-     head_step (If (Val $ LitV $ LitBool true) e1 e2) σ [] e1 σ []
+     base_step (If (Val $ LitV $ LitBool true) e1 e2) σ [] e1 σ []
   | IfFalseS e1 e2 σ :
-     head_step (If (Val $ LitV $ LitBool false) e1 e2) σ [] e2 σ []
+     base_step (If (Val $ LitV $ LitBool false) e1 e2) σ [] e2 σ []
   | FstS v1 v2 σ :
-     head_step (Fst (Val $ PairV v1 v2)) σ [] (Val v1) σ []
+     base_step (Fst (Val $ PairV v1 v2)) σ [] (Val v1) σ []
   | SndS v1 v2 σ :
-     head_step (Snd (Val $ PairV v1 v2)) σ [] (Val v2) σ []
+     base_step (Snd (Val $ PairV v1 v2)) σ [] (Val v2) σ []
   | CaseLS v e1 e2 σ :
-     head_step (Case (Val $ InjLV v) e1 e2) σ [] (App e1 (Val v)) σ []
+     base_step (Case (Val $ InjLV v) e1 e2) σ [] (App e1 (Val v)) σ []
   | CaseRS v e1 e2 σ :
-     head_step (Case (Val $ InjRV v) e1 e2) σ [] (App e2 (Val v)) σ []
+     base_step (Case (Val $ InjRV v) e1 e2) σ [] (App e2 (Val v)) σ []
   | AllocNS n v σ l :
      (0 < n)%Z →
      (∀ m, σ.(heap) !! (l,m) = None) →
-     head_step (AllocN (Val $ LitV $ LitInt $ FinInt n) (Val v)) σ
+     base_step (AllocN (Val $ LitV $ LitInt $ FinInt n) (Val v)) σ
                []
                (* unlike lambda-rust, we expose the fact that the returned loc is the head of the blk *)
-               (Val $ LitV $ LitLoc $ TLoc (Some (l,0%Z)) 0%Z) (state_upd_heap (init_mem (l,0%Z) (Z.to_nat n) v) σ)
+               (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some (l,0%Z)) 0%Z) (state_upd_heap (init_mem (l,0%Z) (Z.to_nat n) v) σ)
                []
   | FreeS n l σ :
      (0 < n)%Z →
      (∀ m, is_Some (σ.(heap) !! (l +ₗ m)) ↔ 0 ≤ m < n)%Z →
-     head_step (Free (Val $ LitV $ LitInt $ FinInt n) (Val $ LitV $ LitLoc $ TLoc (Some l) 0%Z)) σ
+     base_step (Free (Val $ LitV $ LitInt $ FinInt n) (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some l) 0%Z)) σ
                []
                (Val $ LitV LitUnit) (state_upd_heap (free_mem l (Z.to_nat n)) σ)
                []
   | LoadS l v σ :
      σ.(heap) !! l = Some v →
-     head_step (Load (Val $ LitV $ LitLoc $ TLoc (Some l) 0%Z)) σ [] (of_val v) σ []
+     base_step (Load (Val $ LitV $ LitLoc $ ((Some l) &ₜ 0%Z))) σ [] (of_val v) σ []
   | StoreS l v w σ :
      σ.(heap) !! l = Some v →
-     head_step (Store (Val $ LitV $ LitLoc $ TLoc (Some l) 0%Z) (Val w)) σ
+     base_step (Store (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some l) 0%Z) (Val w)) σ
                []
                (Val $ LitV LitUnit) (state_upd_heap <[l:=w]> σ)
                []
   | XchgS l v1 v2 σ :
      σ.(heap) !! l = Some v1 →
-     head_step (Xchg (Val $ LitV $ LitLoc $ TLoc (Some l) 0%Z) (Val v2)) σ
+     base_step (Xchg (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some l) 0%Z) (Val v2)) σ
                []
                (Val v1) (state_upd_heap <[l:=v2]> σ)
                []
@@ -687,27 +689,27 @@ Inductive head_step : expr → state → list observation → expr → state →
      (* Crucially, this compares the same way as [EqOp]! *)
      vals_compare_safe vl v1 →
      b = bool_decide (vl = v1) →
-     head_step (CmpXchg (Val $ LitV $ LitLoc $ TLoc (Some l) 0%Z) (Val v1) (Val v2)) σ
+     base_step (CmpXchg (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some l) 0%Z) (Val v1) (Val v2)) σ
                []
                (Val $ PairV vl (LitV $ LitBool b)) (if b then state_upd_heap <[l:=v2]> σ else σ)
                []
   | FaaS l i1 i2 σ :
      σ.(heap) !! l = Some (LitV (LitInt (FinInt i1))) →
-     head_step (FAA (Val $ LitV $ LitLoc $ TLoc (Some l) 0%Z) (Val $ LitV $ LitInt $ FinInt i2)) σ
+     base_step (FAA (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some l) 0%Z) (Val $ LitV $ LitInt $ FinInt i2)) σ
                []
                (Val $ LitV $ LitInt $ FinInt i1) (state_upd_heap <[l:=LitV (LitInt (FinInt (i1 + i2)))]>σ)
                []
   | ForkS e σ:
-     head_step (Fork e) σ [] (Val $ LitV LitUnit) σ [e]
+     base_step (Fork e) σ [] (Val $ LitV LitUnit) σ [e]
   | NewProphS σ p :
      p ∉ σ.(used_proph_id) →
-     head_step NewProph σ
+     base_step NewProph σ
                []
                (Val $ LitV $ LitProphecy p) (state_upd_used_proph_id ({[ p ]} ∪.) σ)
                []
   | ResolveS p v e σ w σ' κs ts :
-     head_step e σ κs (Val v) σ' ts →
-     head_step (Resolve e (Val $ LitV $ LitProphecy p) (Val w)) σ
+     base_step e σ κs (Val v) σ' ts →
+     base_step (Resolve e (Val $ LitV $ LitProphecy p) (Val w)) σ
                (κs ++ [(p, (v, w))]) (Val v) σ' ts.
 
 (** Basic properties about the language *)
@@ -718,11 +720,11 @@ Lemma fill_item_val Ki e :
   is_Some (to_val (fill_item Ki e)) → is_Some (to_val e).
 Proof. intros [v ?]. induction Ki; simplify_option_eq; eauto. Qed.
 
-Lemma val_head_stuck e1 σ1 κ e2 σ2 efs : head_step e1 σ1 κ e2 σ2 efs → to_val e1 = None.
+Lemma val_base_stuck e1 σ1 κ e2 σ2 efs : base_step e1 σ1 κ e2 σ2 efs → to_val e1 = None.
 Proof. destruct 1; naive_solver. Qed.
 
-Lemma head_ctx_step_val Ki e σ1 κ e2 σ2 efs :
-  head_step (fill_item Ki e) σ1 κ e2 σ2 efs → is_Some (to_val e).
+Lemma base_ctx_step_val Ki e σ1 κ e2 σ2 efs :
+  base_step (fill_item Ki e) σ1 κ e2 σ2 efs → is_Some (to_val e).
 Proof. revert κ e2. induction Ki; inversion_clear 1; simplify_option_eq; eauto. Qed.
 
 Lemma fill_item_no_val_inj Ki1 Ki2 e1 e2 :
@@ -741,7 +743,7 @@ Proof.
   assert (l' = l.2 ∨ l.2 + 1 ≤ l')%Z as [->|?] by lia.
   { by rewrite -surjective_pairing lookup_insert. }
   rewrite lookup_insert_ne; last by destruct l; intros ?; simplify_eq/=; lia.
-  rewrite -(loc_add_blk l 1) IH /=; last lia. done.
+  rewrite -(Loc.loc_add_blk l 1) IH /=; last lia. done.
 Qed.
 
 Lemma lookup_init_mem_ne mem (l l' : loc) (n : nat) v :
@@ -763,7 +765,7 @@ Proof.
   assert (∀ (l : loc) ls (X : gset positive),
     l ∈ ls → l.1.(blk_car) ∈ foldr (λ l, ({[l.1.(blk_car)]} ∪.)) X ls) as help.
   { induction 1; set_solver. }
-  rewrite /fresh_blk /loc_add /= -(not_elem_of_dom (D := gset loc)) -elem_of_elements.
+  rewrite /fresh_blk /Loc.add /= -(not_elem_of_dom (D := gset loc)) -elem_of_elements.
   move=> /(help _ _ ∅) /=. apply is_fresh.
 Qed.
 
@@ -771,8 +773,8 @@ Lemma alloc_fresh v n σ :
   let l := (fresh_blk (dom σ.(heap)), 0%Z) in
   let init := replicate (Z.to_nat n) (LitV $ LitInt $ FinInt 0) in
   (0 < n)%Z →
-  head_step (AllocN ((Val $ LitV $ LitInt $ FinInt n)) (Val v)) σ []
-            (Val $ LitV $ LitLoc $ TLoc (Some l) 0%Z) (state_upd_heap (init_mem l (Z.to_nat n) v) σ) [].
+  base_step (AllocN ((Val $ LitV $ LitInt $ FinInt n)) (Val v)) σ []
+            (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some l) 0%Z) (state_upd_heap (init_mem l (Z.to_nat n) v) σ) [].
 Proof.
   intros l init Hn. apply AllocNS; first done.
   - intros i. apply (is_fresh_blk _ i).
@@ -782,7 +784,7 @@ Lemma lookup_free_mem_ne σ l l' n : l.1 ≠ l'.1 → free_mem l n σ !! l' = σ
 Proof.
   revert l. induction n as [|n IH]=> l ? //=.
   rewrite lookup_delete_ne; last congruence.
-  apply IH. by rewrite loc_add_blk.
+  apply IH. by rewrite Loc.loc_add_blk.
 Qed.
 
 Lemma delete_free_mem σ l l' n :
@@ -793,13 +795,13 @@ Qed.
 
 Lemma new_proph_id_fresh σ :
   let p := fresh σ.(used_proph_id) in
-  head_step NewProph σ [] (Val $ LitV $ LitProphecy p) (state_upd_used_proph_id ({[ p ]} ∪.) σ) [].
+  base_step NewProph σ [] (Val $ LitV $ LitProphecy p) (state_upd_used_proph_id ({[ p ]} ∪.) σ) [].
 Proof. constructor. apply is_fresh. Qed.
 
-Lemma heap_lang_mixin : EctxiLanguageMixin of_val to_val fill_item head_step.
+Lemma heap_lang_mixin : EctxiLanguageMixin of_val to_val fill_item base_step.
 Proof.
-  split; apply _ || eauto using to_of_val, of_to_val, val_head_stuck,
-    fill_item_val, fill_item_no_val_inj, head_ctx_step_val.
+  split; apply _ || eauto using to_of_val, of_to_val, val_base_stuck,
+    fill_item_val, fill_item_no_val_inj, base_ctx_step_val.
 Qed.
 End heap_lang.
 
@@ -828,8 +830,8 @@ Proof.
   by simplify_eq.
 Qed.
 
-Lemma prim_step_to_val_is_head_step e σ1 κs w σ2 efs :
-  prim_step e σ1 κs (Val w) σ2 efs → head_step e σ1 κs (Val w) σ2 efs.
+Lemma prim_step_to_val_is_base_step e σ1 κs w σ2 efs :
+  prim_step e σ1 κs (Val w) σ2 efs → base_step e σ1 κs (Val w) σ2 efs.
 Proof.
   intro H. destruct H as [K e1 e2 H1 H2].
   assert (to_val (fill K e2) = Some w) as H3; first by rewrite -H2.
@@ -838,9 +840,9 @@ Qed.
 
 (** If [e1] makes a head step to a value under some state [σ1] then any head
  step from [e1] under any other state [σ1'] must necessarily be to a value. *)
-Lemma head_step_to_val e1 σ1 κ e2 σ2 efs σ1' κ' e2' σ2' efs' :
-  head_step e1 σ1 κ e2 σ2 efs →
-  head_step e1 σ1' κ' e2' σ2' efs' → is_Some (to_val e2) → is_Some (to_val e2').
+Lemma base_step_to_val e1 σ1 κ e2 σ2 efs σ1' κ' e2' σ2' efs' :
+  base_step e1 σ1 κ e2 σ2 efs →
+  base_step e1 σ1' κ' e2' σ2' efs' → is_Some (to_val e2) → is_Some (to_val e2').
 Proof. destruct 1; inversion 1; naive_solver. Qed.
 
 Lemma irreducible_resolve e v1 v2 σ :
@@ -848,7 +850,7 @@ Lemma irreducible_resolve e v1 v2 σ :
 Proof.
   intros H κs ? σ' efs [Ks e1' e2' Hfill -> step]. simpl in *.
   induction Ks as [|K Ks _] using rev_ind; simpl in Hfill.
-  - subst e1'. inversion step. eapply H. by apply head_prim_step.
+  - subst e1'. inversion step. eapply H. by apply base_prim_step.
   - rewrite fill_app /= in Hfill.
     destruct K; (inversion Hfill; subst; clear Hfill; try
       match goal with | H : Val ?v = fill Ks ?e |- _ =>

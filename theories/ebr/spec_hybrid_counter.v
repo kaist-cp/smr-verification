@@ -29,9 +29,9 @@ Definition hcounter_new_spec' : Prop :=
 Definition hcounter_inc_spec' : Prop :=
   ⊢ ∀ γe γc c g,
   IsHCounter γe γc c -∗ rcu.(Guard) γe g Deactivated -∗
-  <<< ∀∀ (x : nat), HCounter γc x >>>
+  <<{ ∀∀ (x : nat), HCounter γc x }>>
     hcounter_inc #c #g @ ⊤,(↑hcounterN ∪ ↑(ptrsN rcuN)),↑(mgmtN rcuN)
-  <<< HCounter γc (x + 1)%nat, RET #x, rcu.(Guard) γe g Deactivated >>>.
+  <<{ HCounter γc (x + 1)%nat | RET #x; rcu.(Guard) γe g Deactivated }>>.
 
 End spec.
 

@@ -32,9 +32,9 @@ Definition counter_new_spec' : Prop :=
 Definition counter_inc_spec' : Prop :=
   ⊢ ∀ γ c,
   IsCounter γ c -∗
-  <<< ∀∀ (x : Z), Counter γ x >>>
+  <<{ ∀∀ (x : Z), Counter γ x }>>
     counter_inc #c @ ⊤,↑counterN,↑(mgmtN hazptrN)
-  <<< Counter γ (x + 1), RET #x >>>.
+  <<{ Counter γ (x + 1) | RET #x }>>.
 
 End spec.
 

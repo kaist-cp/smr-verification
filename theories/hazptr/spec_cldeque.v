@@ -36,37 +36,37 @@ Definition deque_new_spec' : Prop :=
 Definition deque_push_spec' : Prop :=
   ⊢ ∀ γ q (x : val),
   IsDeque γ q -∗ OwnDeque γ q -∗
-  <<< ∀∀ xs, deque γ xs >>>
+  <<{ ∀∀ xs, deque γ xs }>>
     deque_push #q x @ ⊤,(↑dequeN ∪ ↑(ptrsN hazptrN)),↑(mgmtN hazptrN)
-  <<< deque γ (xs ++ [x]), RET #(), OwnDeque γ q >>>.
+  <<{ deque γ (xs ++ [x]) | RET #(); OwnDeque γ q }>>.
 
 Definition deque_pop_spec' : Prop :=
   ⊢ ∀ γ q,
   IsDeque γ q -∗ OwnDeque γ q -∗
-  <<< ∀∀ xs, deque γ xs >>>
+  <<{ ∀∀ xs, deque γ xs }>>
     deque_pop #q @ ⊤,(↑dequeN ∪ ↑(ptrsN hazptrN)),↑(mgmtN hazptrN)
-  <<< ∃∃ (xs' : list val) (ov : val),
+  <<{ ∃∃ (xs' : list val) (ov : val),
         deque γ xs' ∗
         match ov with
         | NONEV => ⌜xs = xs'⌝
         | SOMEV v => ⌜xs = xs' ++ [v]⌝
         | _ => False
-        end,
-      RET ov, OwnDeque γ q >>>.
+        end |
+      RET ov; OwnDeque γ q }>>.
 
 Definition deque_steal_spec' : Prop :=
   ⊢ ∀ γ q,
   IsDeque γ q -∗
-  <<< ∀∀ xs, deque γ xs >>>
+  <<{ ∀∀ xs, deque γ xs }>>
     deque_pop #q @ ⊤,(↑dequeN ∪ ↑(ptrsN hazptrN)),↑(mgmtN hazptrN)
-  <<< ∃∃ (xs' : list val) (ov : val),
+  <<{ ∃∃ (xs' : list val) (ov : val),
         deque γ xs' ∗
         match ov with
         | NONEV => ⌜xs = xs'⌝
         | SOMEV v => ⌜xs = [v] ++ xs'⌝
         | _ => False
-        end,
-      RET ov >>>.
+        end |
+      RET ov }>>.
 End spec.
 
 Record deque_code : Type := dequeCode {

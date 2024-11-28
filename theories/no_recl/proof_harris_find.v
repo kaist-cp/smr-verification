@@ -14,18 +14,15 @@ Notation iProp := (iProp Σ).
 Notation IsHList := (IsHList listN).
 Notation harris_find_au := (harris_find_au listN).
 
-Lemma harris_find_inner_wrong_proph E (prev curr : loc) cn (k : Z) (pr_tag : proph_id) pr_v_tag Φ (anchor : tagged_loc) :
-  prophecy_to_bool pr_v_tag = false →
-  proph pr_tag pr_v_tag -∗
+Lemma harris_find_inner_wrong_proph E (prev curr : loc) cn (k : Z) (pr : proph_id) pr_v Φ (anchor : Loc.tagged_loc) :
+  prophecy_to_bool pr_v = false →
+  proph pr pr_v -∗
   (curr +ₗ next) ↦□ #(cn &ₜ 1) -∗
-  WP harris_find_inner #pr_tag #k #prev #curr #anchor @ E {{ v, Φ v}}.
+  WP harris_find_inner #pr #k #prev #curr #anchor @ E {{ v, Φ v}}.
 Proof.
   iIntros (Hpr) "pr #c.n↦□".
   wp_lam. wp_pures.
-  wp_apply (wp_new_proph with "[//]") as (??) "_"; wp_pures.
-  wp_load. wp_pures.
-  wp_apply (wp_resolve_proph with "pr") as  (pvs') "[%Heq _]".
-  subst pr_v_tag. inversion Hpr.
+  wp_apply (wp_resolve_load with "[$pr $c.n↦□]") as (?) "(-> & _ & _)". inversion Hpr.
 Qed.
 
 Fixpoint RetireChain anchor ret_curr (rL : list loc) : iProp :=
@@ -46,25 +43,25 @@ Local Lemma RetireChain_in_list anchor curr (L : list (inf_Z * bool * loc)) rL i
 Proof.
   iIntros (HLa LT) "RChain Nodes". iIntros (r idx_r Hr).
   destruct rL as [|rn rL]; try done.
-  iInduction rL as [|rn' rL] "IH" forall (anchor rn idx_r Hr idx_a LT HLa).
+  iInduction rL as [|rn' rL IH] forall (anchor rn idx_r Hr idx_a LT HLa).
   - iDestruct "RChain" as (->) "#an.n↦□".
     specialize HLa as HLa'.
     apply list_lookup_fmap_Some in HLa as [[[a_k []] ?] [HLa [= <-]]]; last first.
     { iDestruct (Nodes_rm_idx_remove with "Nodes") as (?) "[(_&_&an.n↦&_) _]"; [exact HLa|lia|].
-      by iDestruct (mapsto_ne with "an.n↦ an.n↦□") as %?.
+      by iDestruct (pointsto_ne with "an.n↦ an.n↦□") as %?.
     }
     iDestruct (get_persistent_Nodes_rm_idx with "Nodes") as (an_n) "#(_&_& an.n↦ & %Han_n)"; [exact HLa|lia|].
-    simpl. iDestruct (mapsto_agree with "an.n↦□ an.n↦") as %[= <-]; iClear "an.n↦".
+    simpl. iDestruct (pointsto_agree with "an.n↦□ an.n↦") as %[= <-]; iClear "an.n↦".
     destruct idx_r; last first.
     { apply lookup_lt_Some in Hr. simpl in *. lia. }
     injection Hr as [= <-]. iPureIntro. rewrite Nat.add_0_r. eauto.
   - iDestruct "RChain" as (an') "(%EQ & #an.n↦□ & RChain)". subst rn. fold (RetireChain an' curr (rn' :: rL)).
     apply list_lookup_fmap_Some in HLa as [[[a_k []] ?] [HLa [= <-]]]; last first.
     { iDestruct (Nodes_rm_idx_remove with "Nodes") as (?) "[(_&_&an.n↦&_) _]"; [exact HLa|lia|].
-      by iDestruct (mapsto_ne with "an.n↦ an.n↦□") as %?.
+      by iDestruct (pointsto_ne with "an.n↦ an.n↦□") as %?.
     }
     iDestruct (get_persistent_Nodes_rm_idx with "Nodes") as (?) "#(_&_& an.n↦ & %Han')"; [exact HLa|lia|].
-    iDestruct (mapsto_agree with "an.n↦□ an.n↦") as %[= <-]; iClear "an.n↦".
+    iDestruct (pointsto_agree with "an.n↦□ an.n↦") as %[= <-]; iClear "an.n↦".
     destruct idx_r as [|[|]]; last first.
     { replace (idx_a + S (S n)) with (idx_a + 1 + S n) by lia.
       iApply ("IH" with "[%] [%] [%] RChain Nodes"); [|lia|exact Han'].
@@ -78,7 +75,7 @@ Proof.
       }
       apply list_lookup_fmap_Some in Han' as [[[an'_k []] ?] [Han' [= <-]]]; last first.
       { iDestruct (Nodes_rm_idx_remove with "Nodes") as (?) "[(_&_&an'.n↦'&_) _]"; [exact Han'|lia|].
-        by iDestruct (mapsto_ne with "an'.n↦' an'.n↦") as %?.
+        by iDestruct (pointsto_ne with "an'.n↦' an'.n↦") as %?.
       }
       iPureIntro. eauto.
     + iPureIntro. rewrite !Nat.add_0_r. eauto.
@@ -93,12 +90,12 @@ Lemma RetireChain_curr anchor curr (L : list (inf_Z * bool * loc)) rL idx_a idx 
 Proof.
   iIntros (HLa LT) "RChain Nodes".
   destruct rL as [|rn rL]; [done|].
-  iInduction rL as [|rn' rL] "IH" forall (rn anchor idx_a LT HLa).
+  iInduction rL as [|rn' rL IH] forall (rn anchor idx_a LT HLa).
   { iDestruct (RetireChain_in_list with "RChain Nodes") as %ElemOfL; [exact HLa|lia|].
     simpl in *. iDestruct "RChain" as (<-) "rn.n↦".
     specialize (ElemOfL _ 0 ltac:(done)) as [a_k HLan].
     iDestruct (get_persistent_Nodes_rm_idx with "Nodes") as (?) "#(_&_& rn.n↦' & %Hrn_n)"; [exact HLan|lia|].
-    iDestruct (mapsto_agree with "rn.n↦ rn.n↦'") as %[= <-]; iClear "rn.n↦'".
+    iDestruct (pointsto_agree with "rn.n↦ rn.n↦'") as %[= <-]; iClear "rn.n↦'".
     iPureIntro. by rewrite -Hrn_n Nat.add_0_r.
   }
   iDestruct (RetireChain_in_list with "RChain Nodes") as %ElemOfL; [exact HLa|lia|].
@@ -129,7 +126,7 @@ Proof.
   { iDestruct "RChain" as %->. by iFrame "∗#". }
   iModIntro.
   destruct rL as [|rn rL]; [done|].
-  iInduction rL as [|rn' rL] "IH" forall (rn anchor) "RChain".
+  iInduction rL as [|rn' rL IH] forall (rn anchor) "RChain".
   + iDestruct "RChain" as (->) "#an'.n↦".
     iExists curr. by iFrame "#".
   + iDestruct "RChain" as (an' ->) "(#an.n↦□ & RChain)". fold RetireChain.
@@ -159,7 +156,7 @@ Lemma harris_helping_cas_spec (committing : bool) rL Φ pr pr_v h γp_a γl (pre
             (* CAS success and commit. *)
             (* Impossible case, cause contradiction. *)
             (∃ (c_n : option loc), (curr +ₗ 0%nat) ↦□ #(c_n &ₜ 1)) ∨
-            (True -∗ Φ (#(bool_decide (c_k = k)), #prev, #curr)%V))
+            Φ (#(bool_decide (c_k = k)), #prev, #curr)%V)
         else
           harris_find_au E γp_a γl k Φ
   }}}.
@@ -194,12 +191,12 @@ Proof.
   iDestruct (RetireChain_curr with "RChain Nodes") as %HL_curr; [exact HLp_next|lia|].
   set (L' := take (idx_L_p + 1) L ++ drop (idx_L_p + 1 + length rL) L).
   assert (idx_L_p + 1 ≤ length L).
-  { apply lookup_lt_Some in HLp_next. rewrite fmap_length in HLp_next. lia. }
+  { apply lookup_lt_Some in HLp_next. rewrite length_fmap in HLp_next. lia. }
   assert (length (take (idx_L_p + 1) L) = idx_L_p + 1).
-  { rewrite take_length_le; done. }
+  { rewrite length_take_le; done. }
   assert (get_abs_state L = get_abs_state L') as ->.
   { rewrite -(take_drop (idx_L_p + 1 + length rL) L). subst L'. rewrite !get_abs_state_app. f_equal.
-    rewrite -{1}(take_drop (idx_L_p + 1) L) take_add_app; [|done].
+    rewrite -{1}(take_drop (idx_L_p + 1) L) take_app_add'; [|done].
     rewrite get_abs_state_app -{2}(app_nil_r (get_abs_state (take (idx_L_p + 1) L))). f_equal.
     apply length_zero_iff_nil, dec_stable.
     intros [n_k ElemOf%elem_of_list_lookup_2]%Nat.neq_0_lt_0%lookup_lt_is_Some.
@@ -221,7 +218,7 @@ Proof.
       iRight. iPureIntro. apply elem_of_app.
       rewrite -(take_drop (idx_L_p + 1 + length rL) L) in HLn.
       apply elem_of_app in HLn as [HLn|HLn]; [left|by right].
-      rewrite -(take_drop (idx_L_p + 1) L) take_add_app in HLn; [|done].
+      rewrite -(take_drop (idx_L_p + 1) L) take_app_add' in HLn; [|done].
       apply elem_of_app in HLn as [HLn|[i_n_L [HL_n Hi_n_L]]%elem_of_take]; [done|exfalso].
       rewrite lookup_drop in HL_n.
       apply lookup_lt_is_Some in Hi_n_L as [n' HrLn].
@@ -229,7 +226,7 @@ Proof.
       naive_solver.
     - rewrite (big_sepL_take_drop _ L (idx_L_p + 1 + length rL)).
       iDestruct "Nodes" as "[NodesTake NodesDrop]".
-      iEval (rewrite -{2}(take_drop (idx_L_p + 1) L) take_add_app; [|done]) in "NodesTake".
+      iEval (rewrite -{2}(take_drop (idx_L_p + 1) L) take_app_add'; [|done]) in "NodesTake".
       iDestruct "NodesTake" as "[NodesTake _]". subst L'.
       rewrite Nat.add_1_r (take_S_r _ _ (p_k,false,prev)); [|exact HLp].
       iDestruct "NodesTake" as "[NodesTake _]".
@@ -237,34 +234,34 @@ Proof.
       iSplitR "NodesDrop"; [iSplitR "p.n↦"|].
       + iApply (big_sepL_mono with "NodesTake"). iIntros (idx_n [[n_k b_n] l_n] HLn) "LN".
         assert (idx_n < idx_L_p) as LT.
-        { apply lookup_lt_Some in HLn as LT_take. rewrite take_length_le in LT_take; [lia|].
-          apply lookup_lt_Some in HLp_next. rewrite fmap_length in HLp_next. lia.
+        { apply lookup_lt_Some in HLn as LT_take. rewrite length_take_le in LT_take; [lia|].
+          apply lookup_lt_Some in HLp_next. rewrite length_fmap in HLp_next. lia.
         }
         case_decide; [lia|].
         unfold ListNode.
         iDestruct "LN" as (on) "($ & $ & l_n.n↦ & %HLl_n)".
         iExists on. iFrame. iPureIntro. rewrite !fmap_app lookup_app_l; last first.
-        { rewrite /= app_length fmap_length take_length_le /=; lia. }
+        { rewrite /= length_app length_fmap length_take_le /=; lia. }
         rewrite -fmap_app -take_S_r; [|done]. rewrite fmap_take lookup_take; [done|lia].
       + unfold ListNode. iExists (Some curr). iFrame "∗#". iPureIntro.
-        rewrite fmap_app lookup_app_r fmap_app app_length /= fmap_length; [|lia].
+        rewrite fmap_app lookup_app_r fmap_app length_app /= length_fmap; [|lia].
         rewrite Nat.add_0_r Nat.sub_diag fmap_drop lookup_drop Nat.add_0_r -HL_curr.
         f_equal. lia.
       + iApply (big_sepL_mono with "NodesDrop"). iIntros (idx_n [[n_k b_n] l_n] HLn) "LN".
         case_decide; [lia|].
         iDestruct "LN" as (on) "($ & $ & l_n.n↦ & %HLl_n)".
         iExists on. iFrame. iPureIntro. rewrite !fmap_app lookup_app_r; last first.
-        all: rewrite /= app_length app_length /= fmap_length take_length_le /=; try lia.
+        all: rewrite /= length_app length_app /= length_fmap length_take_le /=; try lia.
         rewrite fmap_drop lookup_drop -HLl_n. f_equal. lia.
     - iPureIntro. subst L'. split_and!.
       + rewrite !fmap_app !fmap_take !fmap_drop. apply take_drop_inf_Z_sorted; [lia|done].
       + rewrite lookup_app_l; [|lia]. rewrite lookup_take; [done|lia].
       + destruct HLt as [t HLt]. exists t.
         rewrite lookup_app_r; last first.
-        all: rewrite /= !app_length /= !take_length_le /=; try lia.
-        { rewrite drop_length. apply lookup_lt_Some in HL_curr. rewrite fmap_length in HL_curr. lia. }
-        rewrite lookup_drop -HLt. f_equal. rewrite drop_length.
-        apply lookup_lt_Some in HL_curr. rewrite fmap_length in HL_curr. lia.
+        all: rewrite /= !length_app /= !length_take_le /=; try lia.
+        { rewrite length_drop. apply lookup_lt_Some in HL_curr. rewrite length_fmap in HL_curr. lia. }
+        rewrite lookup_drop -HLt. f_equal. rewrite length_drop.
+        apply lookup_lt_Some in HL_curr. rewrite length_fmap in HL_curr. lia.
   }
   (* Check if we need to commit. *)
   destruct committing; simpl in *; last first.
@@ -290,7 +287,7 @@ Proof.
   apply elem_of_list_lookup in HLc as [idx_c HLc].
   apply list_lookup_fmap_Some in HL_curr as [[[c_k' b] ?] [HL_curr [= <-]]].
   iDestruct (get_persistent_Nodes_rm_idx with "Nodes") as (?) "#(c.k↦□' & _ & _ & _)"; [exact HL_curr|lia|].
-  iDestruct (mapsto_agree with "c.k↦□' c.k↦□") as %[= ->]; iClear "c.k↦□".
+  iDestruct (pointsto_agree with "c.k↦□' c.k↦□") as %[= ->]; iClear "c.k↦□".
   assert (idx_c = idx_L_p + 1 + length rL) as ->.
   { get_first HLc. get_first HL_curr. assert (NoDup L.*1.*1) as NoDup; [by apply sorted_inf_Z_nodup|].
     rewrite NoDup_alt in NoDup. apply (NoDup _ _ c_k); auto.
@@ -306,13 +303,13 @@ Proof.
       apply EQN. f_equal. lia.
     }
     all: rewrite !get_abs_state_app /= Nat.add_1_r (take_S_r _ _ (p_k,false,prev)); simplify_list_eq; auto.
-    - rewrite lookup_app_r get_abs_state_snoc app_length /=; [|lia]. fold idx'.
+    - rewrite lookup_app_r get_abs_state_snoc length_app /=; [|lia]. fold idx'.
       replace (S idx' - (idx' + 1)) with 0 by lia.
       rewrite (drop_S L (c_k, false, curr)); last first.
       { rewrite -HL_curr. f_equal. lia. }
       by rewrite get_abs_state_cons.
     - rewrite lookup_app_l get_abs_state_snoc; last first.
-      { rewrite app_length /=. lia. }
+      { rewrite length_app /=. lia. }
       subst idx'. by rewrite snoc_lookup.
   }
   iModIntro. iSplitL "Linv Nodes INV"; [iApply "INV"; iFrame|].
@@ -322,14 +319,14 @@ Qed.
 Local Lemma harris_find_inner_spec  (* Auxillary, non-unifiable *) Φ (k : Z) E
                                     (* harris inv *) γp_a γl h
                                     (* retire chain stuff*) (o_anchor : option loc) rL
-                                    (* prophecy *) (tagged : bool) (pr_tag : proph_id) (pr_v_tag : list (val * val))
+                                    (* prophecy *) (tagged : bool) (pr : proph_id) (pr_v : list (val * val))
                                     (* prev, curr *) (prev curr : loc) (p_k c_k : inf_Z) :
   (p_k < k)%inf_Z →
-  prophecy_to_bool pr_v_tag = tagged →
+  prophecy_to_bool pr_v = tagged →
   ↑listN ⊆ E →
   {{{ inv listN (HListInternalInv h γp_a γl) ∗
       prev ↪[γp_a]□ p_k ∗ curr ↪[γp_a]□ c_k ∗
-      proph pr_tag pr_v_tag ∗
+      proph pr pr_v ∗
       match o_anchor with
       | None => ⌜rL = []⌝
       | Some anchor => RetireChain anchor curr rL
@@ -344,14 +341,14 @@ Local Lemma harris_find_inner_spec  (* Auxillary, non-unifiable *) Φ (k : Z) E
         | Some _ => harris_find_au E γp_a γl k Φ
         end
   }}}
-    harris_find_inner #pr_tag #k #prev #curr #(o_anchor &ₜ 0) @ E
+    harris_find_inner #pr #k #prev #curr #(o_anchor &ₜ 0) @ E
   {{{ v, RET v;
     if decide (tagged ∨ (c_k < k)%inf_Z) then
       (* We went into another iteration. *)
       ⌜v = NONEV⌝ ∗ harris_find_au E γp_a γl k Φ ∨
       (∃ (ret_b : bool) (ret_prev ret_curr : loc),
         ⌜v = SOMEV (#ret_b, #ret_prev, #ret_curr)⌝ ∗
-        (True -∗ Φ (#ret_b, #ret_prev, #ret_curr)%V))
+        Φ (#ret_b, #ret_prev, #ret_curr)%V)
     else
       (* We didn't go into another iteration. *)
       match o_anchor with
@@ -363,16 +360,15 @@ Local Lemma harris_find_inner_spec  (* Auxillary, non-unifiable *) Φ (k : Z) E
         ⌜v = NONEV⌝ ∗ harris_find_au E γp_a γl k Φ ∨
         (* cas success *)
         ⌜v = SOMEV (#(bool_decide (c_k = k)), #prev, #curr)⌝ ∗
-        (True -∗ Φ (#(bool_decide (c_k = k)), #prev, #curr)%V)
+        Φ (#(bool_decide (c_k = k)), #prev, #curr)%V
       end
   }}}.
 Proof.
-  intros p_k_LT_k Hpr_tag ?.
-  iIntros (Φ') "(#IsHarris & #p↪□ & #c↪□ & pr_tag & RChain & AU) HΦ'".
-  iLöb as "IH" forall (tagged prev curr p_k c_k p_k_LT_k pr_tag pr_v_tag o_anchor Hpr_tag rL) "p↪□ c↪□".
+  intros p_k_LT_k Hpr ?.
+  iIntros (Φ') "(#IsHarris & #p↪□ & #c↪□ & pr & RChain & AU) HΦ'".
+  iLöb as "IH" forall (tagged prev curr p_k c_k p_k_LT_k pr_v o_anchor Hpr rL) "p↪□ c↪□".
   wp_lam. wp_pures.
-  wp_apply (wp_new_proph with "[//]") as (pr_v_tag' pr_tag') "pr_tag'".
-  wp_pures. wp_bind (! _)%E.
+  wp_bind (Resolve _ _ _)%E.
   iInv "IsHarris" as (p_all L) "(>Linv & >●p_all & >PTRS & Nodes & >(%HL & %HLh & %HLt))".
   iDestruct (ghost_map_lookup with "●p_all c↪□") as %Hptrs_curr.
   iDestruct (get_persistent_AllPtrs with "PTRS") as "#[c.k↦□ c_next]"; [exact Hptrs_curr|].
@@ -383,25 +379,18 @@ Proof.
     iDestruct "c_next" as "[c_next|%HLcurr]"; last first.
     { apply elem_of_list_lookup in HLcurr as [idx HLcurr].
       iDestruct (Nodes_remove with "Nodes") as (c_next) "[(_ & _ & c.n↦ & >%HLc_next) Nodes]"; [exact HLcurr|].
-      wp_load. iDestruct (Nodes_combine with "Nodes [] [] [c.n↦]") as "Nodes"; [done..|].
-      iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
-      { repeat iExists _. by iFrame "∗#%". }
-      wp_pures.
-      wp_apply (wp_resolve_proph with "pr_tag") as (?) "[%Heq _]".
-      rewrite Heq in Hpr_tag. inversion Hpr_tag.
+      wp_apply (wp_resolve_load with "[$pr $c.n↦]") as (?) "(-> & _ & _)". inversion Hpr.
     }
     iDestruct "c_next" as (c_n c_n_k) "[c.n↦□ c_n↪□]".
-    wp_load.
+    wp_apply (wp_resolve_load with "[$pr $c.n↦□]") as (pr_v') "(-> & pr & _)".
     (* Get information of next pointer. *)
     iDestruct (ghost_map_lookup with "●p_all c_n↪□") as %Hptrs_c_n.
     iDestruct (get_persistent_AllPtrs with "PTRS") as "#[c_n.k↦□ c_n]"; [exact Hptrs_c_n|].
     iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
     { repeat iExists _. by iFrame "∗#%". }
     wp_pures.
-    wp_apply (wp_resolve_proph with "pr_tag") as  (?) "_".
-    wp_pures.
-    wp_apply (get_anchor_spec with "[$RChain $c.n↦□]") as  (new_a) "RChain".
-    wp_pures. iApply ("IH" with "[%] [%] pr_tag' [RChain] [AU] [HΦ'] p↪□ c_n↪□"); [done..| |].
+    wp_apply (get_anchor_spec with "[$RChain $c.n↦□]") as (new_a) "RChain".
+    wp_pures. iApply ("IH" with "[%] [%] pr [RChain] [AU] [HΦ'] p↪□ c_n↪□"); [done..| |].
     all: case_decide; try done.
     iIntros "!>" (v) "[[% HΦ]|[% HΦ]]"; iApply "HΦ'"; subst v.
     - iLeft. by iFrame "∗#".
@@ -410,16 +399,11 @@ Proof.
   (* assert that we must not be tagged. *)
   iDestruct "c_next" as "[c_next|%HLcurr]".
   { iDestruct "c_next" as (c_next ?) "#[c.n↦□ _]".
-    wp_load.
-    iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
-    { repeat iExists _. by iFrame "∗#%". }
-    wp_pures.
-    wp_apply (wp_resolve_proph with "pr_tag") as (pvs') "[%Heq _]".
-    rewrite Heq in Hpr_tag. inversion Hpr_tag.
+    wp_apply (wp_resolve_load with "[$pr $c.n↦□]") as (?) "(-> & _ & _)". inversion Hpr.
   }
   apply elem_of_list_lookup in HLcurr as [idx HLcurr].
   iDestruct (Nodes_remove with "Nodes") as (c_next) "[(_ & _ & c.n↦ & >%HLc_next) Nodes]"; [exact HLcurr|].
-  wp_load.
+  wp_apply (wp_resolve_load with "[$pr $c.n↦]") as (pr_v') "(-> & pr & c.n↦)".
   iDestruct (Nodes_combine with "Nodes [] [] [c.n↦]") as "Nodes"; [done..|].
   (* Check to see if we are going into next iteration. *)
   destruct (decide (c_k < k)%inf_Z) as [c_k_LT|c_k_GE].
@@ -430,16 +414,14 @@ Proof.
     rename c_next' into c_next.
     apply list_lookup_fmap_Some in HLc_next as [[[cn_k b] ?] [HLc_next [= <-]]].
     iDestruct (get_persistent_Nodes with "Nodes") as (on) "#(c_next.k↦□ & c_next↪□ & #c_next.n↦□ & %HLc_next_next)"; [exact HLc_next|].
-    destruct (decide (prophecy_to_bool pr_v_tag' ∨ (cn_k < k)%inf_Z)) as [NotCommit|[Hpr_v'%Is_true_false GE]%Decidable.not_or].
+    destruct (decide (prophecy_to_bool pr_v' ∨ (cn_k < k)%inf_Z)) as [NotCommit|[Hpr_v'%Is_true_false GE]%Decidable.not_or].
     { (* Tagged or key too small. Do not commit. *)
       iModIntro. iSplitL "●p_all PTRS Nodes Linv".
       { repeat iExists _. by iFrame "∗#%". }
-      wp_pures.
-      wp_apply (wp_resolve_proph with "pr_tag") as (pvs') "[_ _]".
       wp_pures. wp_load. wp_pures.
       iEval (case_bool_decide; [|naive_solver]).
       wp_pures.
-      iApply ("IH" with "[%] [%] pr_tag' [RChain] [AU] [HΦ'] c↪□ c_next↪□"); [done..| |].
+      iApply ("IH" with "[%] [%] pr [RChain] [AU] [HΦ'] c↪□ c_next↪□"); [done..| |].
       all: repeat case_decide; naive_solver.
     }
     (* Not tagged and key value good. Commit. *)
@@ -447,12 +429,10 @@ Proof.
     destruct b.
     { iModIntro. iSplitL "●p_all PTRS Nodes Linv".
     { repeat iExists _. by iFrame "∗#%". }
-      wp_pures.
-      wp_apply (wp_resolve_proph with "pr_tag") as  (?) "_".
       wp_pures. wp_load. wp_pures.
       iEval (case_bool_decide; [|naive_solver]).
       wp_pures.
-      by iApply (harris_find_inner_wrong_proph with "pr_tag' c_next.n↦□").
+      by iApply (harris_find_inner_wrong_proph with "pr c_next.n↦□").
     }
     iMod "AU" as (?) "[[Labs %HLabs] [_ Commit]]".
     iDestruct (ghost_var_agree with "Labs Linv") as %[= ->].
@@ -477,12 +457,10 @@ Proof.
     iModIntro.
     iSplitL "●p_all PTRS Nodes Linv".
     { repeat iExists _. by iFrame "∗#%". }
-    wp_pures.
-    wp_apply (wp_resolve_proph with "pr_tag") as  (?) "_".
     wp_pures. wp_load. wp_pures.
     iEval (case_bool_decide; [|naive_solver]).
     wp_pures.
-    iApply ("IH" $! false with "[%] [%] pr_tag' [] [] [HΦ HΦ'] c↪□ c_next↪□"); [done|done|done|..].
+    iApply ("IH" $! false with "[%] [%] pr [] [] [HΦ HΦ'] c↪□ c_next↪□"); [done|done|done|..].
     - case_decide; [naive_solver|done].
     - case_decide as EQN; [done|].
       iIntros "!>" (? ->). iApply "HΦ'". iRight.
@@ -492,8 +470,7 @@ Proof.
   iClear "IH". case_decide; [naive_solver|].
   iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
   { repeat iExists _. by iFrame "∗#%". }
-  clear dependent p_all L. wp_pures.
-  wp_apply (wp_resolve_proph with "pr_tag") as  (?) "_".
+  clear dependent p_all L.
   wp_pures. wp_load. wp_pures.
   iEval (case_bool_decide; [naive_solver|]).
   wp_pures.
@@ -502,72 +479,52 @@ Proof.
   { wp_pures. by iApply "HΦ'". }
   (* We will preform a CAS *)
   wp_pures.
-  wp_apply (wp_new_proph with "[//]") as (pr_v_cas pr_cas) "pr_cas".
-  wp_pures.
-  wp_apply (harris_helping_cas_spec true rL with "[$pr_cas $AU $RChain]") as ([]) "[pr_cas AU]"; [done|exact p_k_LT_k|by iFrame "#"|..];
+  wp_apply (harris_helping_cas_spec true rL with "[$pr $AU $RChain]") as ([]) "[pr AU]"; [done|exact p_k_LT_k|by iFrame "#"|..];
 
   last first; wp_pures.
   { iApply "HΦ'". iLeft. by iFrame "AU". }
 
   (* Check if tag check on curr will succeed. *)
-  destruct (prophecy_to_bool pr_v_cas) eqn:Hpr_v_cas.
+  destruct (prophecy_to_bool pr_v') eqn:Hpr_v'.
   { (* Tagged, do not commit. *)
     case_decide; [|naive_solver].
-    wp_pures. wp_bind (!_)%E.
+    wp_pures. wp_bind (Resolve _ _ _)%E.
     iInv "IsHarris" as (p_all L) "(>Linv & >●p_all & >PTRS & Nodes & >(%HL & %HLh & %HLt))".
+    wp_apply (wp_resolve with "pr"); [done|].
     (* Get information of next pointer. *)
     iDestruct (ghost_map_lookup with "●p_all c↪□") as %Hptrs_c.
     iDestruct (get_persistent_AllPtrs with "PTRS") as "#[_ [#c.n|%HLc]]"; [exact Hptrs_c| |]; last first.
     { (* Not tagged, impossible. *)
       apply elem_of_list_lookup in HLc as [idx_c HLc].
       iDestruct (Nodes_remove with "Nodes") as (c_n) "[(_ & _ & c.n↦ & >%HLc_n) Nodes]"; [exact HLc|].
-      wp_load.
-      iDestruct (Nodes_combine with "Nodes [] [] [c.n↦]") as "Nodes"; [done..|].
-      iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
-      { repeat iExists _. by iFrame "∗#%". }
-      wp_pures.
-      wp_apply (wp_resolve_proph with "pr_cas") as (?) "[%Heq _]".
-      subst pr_v_cas. inversion Hpr_v_cas.
+      wp_load. iIntros "!>" (?) "->". inversion Hpr_v'.
     }
     iDestruct "c.n" as (c_n c_n_k) "#[c.n↦ _]".
-    wp_load.
+    wp_load. iIntros "!>" (?) "_ _".
     iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
     { repeat iExists _. by iFrame "∗#%". }
-    wp_pures.
-    wp_apply (wp_resolve_proph with "pr_cas") as (?) "_".
     wp_pures. iApply "HΦ'". iModIntro. iLeft. by iFrame "AU".
   }
   case_decide; [naive_solver|].
   (* Assert that we are not tagged *)
-  iDestruct "AU" as "[[% c.n↦□]|HΦ]".
-  { (* Tagged, impossible. *)
-    wp_load. wp_pures.
-    wp_apply (wp_resolve_proph with "pr_cas") as (?) "[%Heq _]".
-    subst pr_v_cas. inversion Hpr_v_cas.
-  }
-  wp_bind (!_)%E.
+  iDestruct "AU" as "[[% #c.n↦□]|HΦ]".
+  { wp_apply (wp_resolve_load with "[$pr $c.n↦□]") as (?) "(-> & _ & _)". inversion Hpr_v'. }
+  wp_bind (Resolve _ _ _)%E.
   iInv "IsHarris" as (p_all L) "(>Linv & >●p_all & >PTRS & Nodes & >(%HL & %HLh & %HLt))".
   (* Get information of next pointer. *)
   iDestruct (ghost_map_lookup with "●p_all c↪□") as %Hptrs_c.
   iDestruct (get_persistent_AllPtrs with "PTRS") as "#[_ [#c.n|%HLc]]"; [exact Hptrs_c| |].
   { (* Tagged, impossible. *)
     iDestruct "c.n" as (c_n c_n_k) "#[c.n↦ _]".
-    wp_load.
-    iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
-    { repeat iExists _. by iFrame "∗#%". }
-    wp_pures.
-    wp_apply (wp_resolve_proph with "pr_cas") as (?) "[%Heq _]".
-    subst pr_v_cas. inversion Hpr_v_cas.
+    wp_apply (wp_resolve_load with "[$pr $c.n↦]") as (?) "(-> & _ & _)". inversion Hpr_v'.
   }
   (* Not tagged. *)
   apply elem_of_list_lookup in HLc as [idx_c HLc].
   iDestruct (Nodes_remove with "Nodes") as (c_n) "[(_ & _ & c.n↦ & >%HLc_n) Nodes]"; [exact HLc|].
-  wp_load.
+  wp_apply (wp_resolve_load with "[$pr $c.n↦]") as (?) "(-> & _ & c.n↦)".
   iDestruct (Nodes_combine with "Nodes [] [] [c.n↦]") as "Nodes"; [done..|].
   iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
   { repeat iExists _. by iFrame "∗#%". }
-  wp_pures.
-  wp_apply (wp_resolve_proph with "pr_cas") as (?) "_".
   wp_pures. iApply "HΦ'". iModIntro. iRight. iSplit; done.
 Qed.
 
@@ -578,13 +535,9 @@ Proof.
   iIntros "#l.h↦ #h↪□ #IsHarris" (Φ) "AU".
   iLöb as "IH".
   wp_lam. wp_pures.
-  wp_apply (wp_new_proph with "[//]") as (pr_v_tag pr_tag) "pr_tag".
-  wp_pures. wp_bind (! _)%E.
-  iInv "IsHarris" as (p_all L) "(>Linv & >●p_all & PTRS & Nodes & >(%HL & %HLh & %HLt))".
-  wp_load.
-  iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
-  { repeat iExists _. by iFrame "∗#". }
-  clear dependent p_all L. wp_pures. wp_bind (! _)%E.
+  wp_apply (wp_new_proph with "[//]") as (pr_v pr) "pr".
+  wp_pures. wp_load. wp_pures.
+  wp_bind (! _)%E.
   iInv "IsHarris" as (ptrs L) "(>Linv & >●p_all & PTRS & Nodes & >(%HL & %HLh & %HLt))".
   iDestruct (Nodes_remove with "Nodes") as (on) "[(#h.k↦□ & _ & h.n↦ & >%HLh_next) Nodes]"; [exact HLh|].
   wp_load.
@@ -598,16 +551,16 @@ Proof.
   iDestruct (get_persistent_Nodes with "Nodes") as (c_next) "(#c.k↦□ & #c↪□ & #c.n↦□ & %HLc_next)"; [exact HLnext|].
   assert (-∞ᵢ < k)%inf_Z as LT_k; [done|].
   (* Check tag and key value. *)
-  destruct (decide (prophecy_to_bool pr_v_tag ∨ (c_k < k)%inf_Z)) as [NotCommit|[Hpr_v'%Is_true_false GE]%Decidable.not_or].
+  destruct (decide (prophecy_to_bool pr_v ∨ (c_k < k)%inf_Z)) as [NotCommit|[Hpr_v'%Is_true_false GE]%Decidable.not_or].
   { (* Tagged or key value too small. Do not commit. *)
     iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
     { repeat iExists _. by iFrame "∗#%". }
     wp_pures.
-    wp_apply (harris_find_inner_spec with "[$IsHarris AU $pr_tag]"); [exact LT_k|done|done|iFrame "∗#%"|].
+    wp_apply (harris_find_inner_spec with "[$IsHarris AU $pr]"); [exact LT_k|done|done|iFrame "∗#%"|].
     { iSplit; [done|]. case_decide; done. }
     case_decide; [|done].
-    iIntros (v) "[[%EQ AU]|HΦ]".
-    { rewrite EQ. wp_pures. iApply ("IH" with "AU"). }
+    iIntros (v) "[[-> AU]|HΦ]".
+    { wp_pures. iApply ("IH" with "AU"). }
     iDestruct "HΦ" as (??? ->) "HΦ".
     wp_pures. by iApply "HΦ".
   }
@@ -617,7 +570,7 @@ Proof.
     iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
     { repeat iExists _. by iFrame "∗#%". }
     wp_pures.
-    by wp_apply (harris_find_inner_wrong_proph with "pr_tag c.n↦□").
+    by wp_apply (harris_find_inner_wrong_proph with "pr c.n↦□").
   }
 
   (* Not tagged and key value is good. commit. *)
@@ -639,7 +592,7 @@ Proof.
   iModIntro. iSplitL "Linv ●p_all PTRS Nodes".
   { repeat iExists _. by iFrame "∗#%". }
   wp_pures.
-  wp_apply (harris_find_inner_spec (λ _, True)%I with "[$pr_tag]"); [exact LT_k|done|done|iFrame "∗#%"|].
+  wp_apply (harris_find_inner_spec (λ _, True)%I with "[$pr]"); [exact LT_k|done|done|iFrame "∗#%"|].
   { case_decide; naive_solver. }
   case_decide; [naive_solver|].
   iIntros (v ->). wp_pures. by iApply "HΦ".

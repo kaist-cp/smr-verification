@@ -30,19 +30,19 @@ Definition queue_new_spec' : Prop :=
 Definition queue_push_spec' : Prop :=
   ⊢ ∀ γe γq qu (x : val) g,
   IsQueue γe γq qu -∗ rcu.(Guard) γe g Deactivated -∗
-  <<< ∀∀ xs, Queue γq xs >>>
+  <<{ ∀∀ xs, Queue γq xs }>>
     queue_push #qu x #g @ ⊤,(↑queueN ∪ ↑(ptrsN rcuN)),↑(mgmtN rcuN)
-  <<< Queue γq (xs ++ [x]), RET #(), rcu.(Guard) γe g Deactivated >>>.
+  <<{ Queue γq (xs ++ [x]) | RET #(); rcu.(Guard) γe g Deactivated }>>.
 
 Definition queue_pop_spec' : Prop :=
   ⊢ ∀ γe γq qu g,
   IsQueue γe γq qu -∗ rcu.(Guard) γe g Deactivated -∗
-  <<< ∀∀ xs, Queue γq xs >>>
+  <<{ ∀∀ xs, Queue γq xs }>>
     queue_pop #qu #g @ ⊤,(↑queueN ∪ ↑(ptrsN rcuN)),↑(mgmtN rcuN)
-  <<< Queue γq (match xs with [] => [] | _::xs => xs end),
-      RET (match xs with [] => NONEV | v::_ => SOMEV v end),
+  <<{ Queue γq (match xs with [] => [] | _::xs => xs end) |
+      RET (match xs with [] => NONEV | v::_ => SOMEV v end);
       rcu.(Guard) γe g Deactivated
-  >>>.
+  }>>.
 End spec.
 
 Record queue_code : Type := QueueCode {

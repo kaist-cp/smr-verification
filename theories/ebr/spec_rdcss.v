@@ -32,9 +32,9 @@ Definition new_rdcss_spec' : Prop :=
 Definition get_spec' : Prop :=
   ⊢ ∀ γ_e γ_n (l_n : loc) g,
   IsRdcss γ_e γ_n l_n -∗ rcu.(Guard) γ_e g Deactivated -∗
-  <<< ∀∀ (n : val), Rdcss γ_n n >>>
+  <<{ ∀∀ (n : val), Rdcss γ_n n }>>
     get #l_n #g @ ⊤,(↑rdcssN ∪ ↑(ptrsN rcuN)),↑(mgmtN rcuN)
-  <<< Rdcss γ_n n, RET n, rcu.(Guard) γ_e g Deactivated >>>.
+  <<{ Rdcss γ_n n | RET n; rcu.(Guard) γ_e g Deactivated }>>.
 
 Definition rdcss_spec' : Prop :=
   ⊢ ∀ γ_e γ_n (l_n l_m g : loc) (m1 n1 n2 : val),
@@ -42,9 +42,9 @@ Definition rdcss_spec' : Prop :=
   ⌜val_is_unboxed m1⌝ →
   IsRdcss γ_e γ_n l_n -∗
   rcu.(Guard) γ_e g Deactivated -∗
-  <<< ∀∀ (m n : val), l_m ↦_(λ _, True) m ∗ Rdcss γ_n n >>>
+  <<{ ∀∀ (m n : val), l_m ↦_(λ _, True) m ∗ Rdcss γ_n n }>>
     rdcss #l_m #l_n m1 n1 n2 #g @ ⊤,(↑rdcssN ∪ ↑(ptrsN rcuN) ∪ ↑inv_heapN),↑(mgmtN rcuN)
-  <<< l_m ↦_(λ _, True) m ∗ Rdcss γ_n (if decide (m = m1 ∧ n = n1) then n2 else n), RET n, rcu.(Guard) γ_e g Deactivated >>>.
+  <<{ l_m ↦_(λ _, True) m ∗ Rdcss γ_n (if decide (m = m1 ∧ n = n1) then n2 else n) | RET n; rcu.(Guard) γ_e g Deactivated }>>.
 
 End spec.
 

@@ -10,8 +10,8 @@ From smr Require Import spec_slot_bag_oloc code_slot_bag_oloc.
 Set Printing Projections.
 
 Class slot_bag_olocG Σ := SlotBagoLocG {
-  slot_bag_oloc_ghost_mapG :> ghost_mapG Σ loc (bool * (option blk));
-  slot_bag_oloc_mono_listG :> mono_listG loc Σ;
+  #[local] slot_bag_oloc_ghost_mapG :: ghost_mapG Σ loc (bool * (option blk));
+  #[local] slot_bag_oloc_mono_listG :: mono_listG loc Σ;
 }.
 
 Definition slot_bag_olocΣ : gFunctors := #[ ghost_mapΣ loc (bool * (option blk)); mono_listΣ loc].
@@ -225,7 +225,7 @@ Proof.
   do 2 rewrite last_snoc in Lhd. injection Lhd as ->.
   iDestruct (phys_list_snoc with "Lphys") as "[Lhdx Lphysx]".
   iDestruct (phys_list_snoc with "Lphys'") as "[Lhdx' Lphysx']".
-  iDestruct (mapsto_agree with "Lhdx Lhdx'") as %[= ?].
+  iDestruct (pointsto_agree with "Lhdx Lhdx'") as %[= ?].
   iDestruct (IHxs with "Lphysx Lphysx'") as %->; auto.
 Qed.
 
@@ -246,7 +246,7 @@ Proof.
   iDestruct (phys_list_agree (xs++[x]) (take (S i) xs) with "[] []") as "%"; auto.
     { rewrite take_last; auto. rewrite Hia. apply last_snoc. }
   assert (length (xs ++ [x]) > length (take (S i) xs)).
-  { rewrite take_length snoc_length. lia. }
+  { rewrite length_take snoc_length. lia. }
   rewrite H in H0; lia.
 Qed.
 
@@ -462,7 +462,7 @@ Proof.
   apply Mdom in e as [bv e].
   iDestruct (big_sepM_lookup with "Ms") as "Sphys"; [apply e|].
   iDestruct "Sphys" as "(_ & Sv' & _)".
-  iDestruct (mapsto_valid_2 with "Sv Sv'") as %[H ->].
+  iDestruct (pointsto_valid_2 with "Sv Sv'") as %[H ->].
   destruct bv. by destruct b.
 Qed.
 
@@ -476,7 +476,7 @@ Proof.
   destruct (sbvmap !! slot) eqn:e; auto.
   iDestruct (big_sepM_lookup with "Ms") as "Sphys"; [apply e|].
   iDestruct "Sphys" as "(_ & Sv' & _)".
-  iDestruct (mapsto_valid_2 with "Sv Sv'") as %[H ->].
+  iDestruct (pointsto_valid_2 with "Sv Sv'") as %[H ->].
   destruct p. by destruct b.
 Qed.
 
@@ -486,12 +486,12 @@ Proof.
   iIntros (E Φ). iModIntro.
   iIntros "_ HΦ".
   wp_lam. wp_alloc slotbag as "sb↦" "†sb".
-  wp_pures. rewrite loc_add_0 array_singleton. wp_store.
+  wp_pures. rewrite Loc.add_0 array_singleton. wp_store.
   iMod (ghost_map_alloc_empty) as (γm) "●m".
   iMod (mono_list_own_alloc []) as (γxs) "[●xs _]".
   remember (encode (γm, γxs)) as γsb eqn:Hγsb.
   iAssert (SlotBag γsb slotbag ∅ []) with "[●m ●xs sb↦]" as "SlotBag".
-  { repeat iExists _. rewrite loc_add_0. iFrame "∗%".
+  { repeat iExists _. rewrite Loc.add_0. iFrame "∗%".
     unfold phys_map, phys_list, phys_list_rec. rewrite !big_sepM_empty. iSplit; [|done].
     simpl. iPureIntro. split_and!; [done..|]. unfold domain_of.
     intro s. split; intro Empty.
@@ -505,14 +505,14 @@ Lemma slot_bag_push_slot_loop_spec :
   (∃ p, (slot +ₗ slotNext) ↦ p) -∗
   (slot +ₗ slotActive) ↦ #true -∗
   (slot +ₗ slotValue) ↦ #NULL -∗
-  <<< ∀∀ sbvmap xs, ▷ SlotBag γsb slotBag sbvmap xs >>>
+  <<{ ∀∀ sbvmap xs, ▷ SlotBag γsb slotBag sbvmap xs }>>
     slot_bag_push_slot_loop #slotBag #slot @ E,∅,∅
-  <<< let idx := length xs in
+  <<{ let idx := length xs in
       let sbvmap' := <[slot := (true, None)]> sbvmap in
       SlotBag γsb slotBag sbvmap' (xs ++ [slot]) ∗
       Slot γsb slot idx None ∗
-      ⌜sbvmap !! slot = None⌝,
-      RET #() >>>.
+      ⌜sbvmap !! slot = None⌝ |
+      RET #() }>>.
 Proof.
   iLöb as "IH".
   iIntros (γsb slotBag slot E) "[%sp Snxt] Sact Sv % AU".
@@ -521,7 +521,7 @@ Proof.
     iDestruct "B" as (γm γxs) "(%Enc & Bhd & Mphys & ●Mm & ●L)";
     iDestruct "Mphys" as "(#Lphys & Ms & %Mdom)".
   wp_load. iMod ("Abort" with "[Bhd ●Mm ●L Ms]") as "AU".
-  { iNext; iFrame. iExists γm, γxs. iFrame; auto. }
+  { iNext; iFrame; auto. }
   clear -γsb. iModIntro. wp_pures. wp_store.
 
   wp_pures. wp_bind (CmpXchg _ _ _)%E.
@@ -537,7 +537,7 @@ Proof.
     iDestruct (phys_map_no_slot_sbvmap with "[-Sv] Sv") as %Nosbv; auto.
     iDestruct "Mphys'" as "(#Lphys' & Ms' & %Mdom')".
     iDestruct (phys_list_agree with "Lphys Lphys'") as "%"; subst; auto.
-    iMod (mapsto_persist with "Snxt") as "#Snxt".
+    iMod (pointsto_persist with "Snxt") as "#Snxt".
     iMod (ghost_slot_bag_insert (true, None) with "●Mm")
       as "[●Mm ●Ms]"; first apply Nosbv; simpl.
     iMod (mono_list_auth_own_update (xs' ++ [slot]) with "●L")
@@ -548,33 +548,32 @@ Proof.
     (* commit *)
     iMod ("Commit" with "[-]") as "HΦ";
       last (iModIntro; wp_pures; by iApply "HΦ").
-    iFrame. iSplitR "●Ms ◯L".
-    + iExists γm, γxs. iFrame. iSplit; auto.
+    iFrame. iSplit.
+    + iSplit; auto.
       rewrite last_snoc. iFrame.
       iApply (phys_map_insert with "[Ms'] [Sact1 Sv1]"); auto.
       * iFrame. iSplit; auto.
       * iFrame.
-    + iSplit; auto. iExists γm, γxs. iSplit; auto. iFrame.
-      iApply (mono_list_idx_own_get with "◯L").
+    + iSplit; auto. iSplit; auto. iPureIntro.
       apply snoc_lookup.
   - (* fail, loop *)
     iDestruct "AU" as "[Abort _]".
     wp_cmpxchg_fail.
     iMod ("Abort" with "[Bhd' Mphys' ●Mm ●L]") as "AU".
-    { iNext; iFrame. iExists γm, γxs. iFrame; auto. }
+    { iNext; iFrame; auto. }
     iModIntro. wp_pures.
     iApply ("IH" with "[Snxt] [Sact] [Sv] [AU]"); auto.
 Qed.
 
 Lemma slot_bag_try_acquire_inactive_slot_spec (slotBag : loc) γsb E :
-  ⊢ <<< ∀∀ γm γxs xs (sbvmap : gmap loc (bool * option blk)),
+  ⊢ <<{ ∀∀ γm γxs xs (sbvmap : gmap loc (bool * option blk)),
       ⌜γsb = encode (γm, γxs)⌝ ∗
       (slotBag +ₗ slotBagHead) ↦ #(oloc_to_lit (last xs)) ∗
       phys_map xs sbvmap ∗
       ghost_slot_bag γm sbvmap ∗
-      mono_list_auth_own γxs 1 xs >>>
+      mono_list_auth_own γxs 1 xs }>>
     slot_bag_try_acquire_inactive_slot #slotBag @ E,∅,∅
-  <<< ∃∃ (q : option loc),
+  <<{ ∃∃ (q : option loc),
       (slotBag +ₗ slotBagHead) ↦ #(oloc_to_lit (last xs)) ∗
       mono_list_auth_own γxs 1 xs ∗
       match q with
@@ -587,8 +586,8 @@ Lemma slot_bag_try_acquire_inactive_slot_spec (slotBag : loc) γsb E :
          phys_map xs sbvmap' ∗
          ghost_slot_bag γm sbvmap' ∗
          (∃ idx, Slot γsb slot idx (None))
-      end,
-    RET #(oloc_to_lit q) >>>.
+      end |
+      RET #(oloc_to_lit q) }>>.
 Proof.
   iIntros "% AU".
   wp_rec. wp_pures. wp_bind (! _)%E.
@@ -658,8 +657,8 @@ Proof.
       * by apply domain_of_update.
       * iFrame.
       * by rewrite delete_insert_delete.
-    + iExists (length xs), γm, γxs.
-      iFrame. iSplit; auto.
+    + iExists (length xs), _.
+      iSplit; auto.
       iApply mono_list_idx_own_get; auto.
       apply snoc_lookup.
 Qed.
@@ -683,7 +682,7 @@ Proof.
     iDestruct "AU" as "[Abort _]".
     iIntros "(Bhd & Mphys & ●Mm & ●L)".
     iMod ("Abort" with "[-]"); auto.
-    iFrame. iExists γm, γxs; auto.
+    iFrame.
   }
 
   iIntros (q) "(Bhd & ●L & Scase)".
@@ -694,23 +693,22 @@ Proof.
     iDestruct (slot_lookup with "●L S") as "%"; eauto.
 
     iMod ("Commit" with "[-]") as "HΦ";
-      last (iModIntro; iIntros "_"; wp_pures; by iApply "HΦ").
+      last (iModIntro; wp_pures; by iApply "HΦ").
     iFrame. iSplit; eauto.
-    iExists γm, γxs. iFrame "∗%".
   }
 
   (* acquire fail *)
   iDestruct "AU" as "[Abort _]".
   iDestruct "Scase" as "[Mphys ●Mm]".
   iMod ("Abort" with "[-]") as "AU".
-  { iFrame. iNext. iExists γm, γxs; iFrame; auto. }
-  iModIntro. iIntros "_". simpl. wp_pures. clear.
+  { iNext; iFrame; auto. }
+  iModIntro. simpl. wp_pures. clear.
 
   (* new slot *)
   unfold slot_new. wp_pures. wp_alloc slot as "S" "?".
-  rewrite 3!array_cons 2!loc_add_assoc.
+  rewrite 3!array_cons 2!Loc.add_assoc.
   iDestruct "S" as "(Snxt & Sact & Sv & _)".
-  wp_pures. rewrite loc_add_0.
+  wp_pures. rewrite Loc.add_0.
   wp_store. wp_pures. wp_store. wp_pures. wp_store. wp_let.
 
   (* push the new slot *)
@@ -729,7 +727,7 @@ Proof.
     iDestruct "AU" as "[_ Commit]".
     iIntros "[B [S %]]".
     iMod ("Commit" with "[B S]") as "HΦ"; iFrame; auto.
-    iModIntro. iIntros "_". wp_pures. by iApply "HΦ".
+    iModIntro. wp_pures. by iApply "HΦ".
 Qed.
 
 Lemma slot_set_spec :
@@ -761,8 +759,7 @@ Proof.
 
   (* commit *)
   iMod ("Commit" with "[-]") as "HΦ"; last (iModIntro; auto; by iApply "HΦ").
-  iFrame. iSplit; auto. iSplitL "●L ●Mm"; iExists γm, γxs; iFrame; auto.
-  repeat iSplit; auto; iPureIntro.
+  iFrame. repeat (iSplit; auto). iPureIntro.
   by apply domain_of_update.
 Qed.
 
@@ -795,9 +792,8 @@ Proof.
 
   (* commit *)
   iMod ("Commit" with "[-]") as "HΦ"; last (iModIntro; auto; by iApply "HΦ").
-  iFrame. iSplit; auto.
-  iSplitL "●L ●Mm"; iExists γm, γxs; iFrame; auto.
-  repeat iSplit; auto; iPureIntro. by apply domain_of_update.
+  iFrame. repeat (iSplit; auto). iPureIntro.
+  by apply domain_of_update.
 Qed.
 
 Lemma slot_drop_spec :
@@ -830,7 +826,7 @@ Proof.
   (* commit *)
   iMod ("Commit" with "[-]") as "HΦ"; last (iModIntro; auto; by iApply "HΦ").
   iFrame. iSplit; first by done.
-  iExists γm, γxs; iFrame; auto.
+  iFrame; auto.
   repeat iSplit; auto; iPureIntro. by apply domain_of_update.
 Qed.
 
@@ -841,10 +837,10 @@ Lemma seq_bag_new_spec :
 Proof.
   iIntros (E Φ _) "HΦ".
   wp_rec. wp_alloc seqBag as "SBhd" "?". wp_pures.
-  rewrite array_singleton loc_add_0.
+  rewrite array_singleton Loc.add_0.
   wp_store.
   iModIntro. iApply "HΦ". iExists _.
-  rewrite loc_add_0. by iFrame.
+  rewrite Loc.add_0. by iFrame.
 Qed.
 
 Lemma seq_bag_add_spec :
@@ -855,11 +851,10 @@ Proof.
   wp_rec. wp_pures. wp_load. wp_pures.
   wp_alloc seqNode as "N" "?". wp_pures.
   rewrite 2!array_cons. iDestruct "N" as "[Nnxt [Nv _]]".
-  rewrite 2!loc_add_0.
-  wp_store. wp_pures. wp_store. wp_pures. rewrite loc_add_0. wp_store.
+  rewrite 2!Loc.add_0.
+  wp_store. wp_pures. wp_store. wp_pures. rewrite Loc.add_0. wp_store.
   iModIntro. iApply "HΦ". iExists seqNode; iFrame.
-  rewrite loc_add_0. iFrame.
-  iExists seqNode, hd. by iFrame.
+  rewrite Loc.add_0. by iFrame.
 Qed.
 
 Lemma slot_bag_read_head_spec :
@@ -914,14 +909,14 @@ Lemma phys_list_lookup slist idx slot :
 Proof.
   unfold phys_list.
   iIntros (Hidx) "#LPhys".
-  iInduction slist as [|slot' slist'] "IH" using rev_ind forall (idx slot Hidx); first done.
+  iInduction slist as [|slot' slist' IH] using rev_ind forall (idx slot Hidx); first done.
   rewrite reverse_app /=. iDestruct "LPhys" as "[slot↦ Lphys']". fold (phys_list slist').
   rewrite head_reverse.
   case (decide (idx = length slist')) as [->|NE].
   { rewrite snoc_lookup in Hidx. injection Hidx as ->.
-    rewrite take_app. done. }
+    rewrite take_app_length. done. }
   have {}Hidx : slist' !! idx = Some slot.
-  { apply lookup_lt_Some in Hidx as Hlen. rewrite app_length /= in Hlen.
+  { apply lookup_lt_Some in Hidx as Hlen. rewrite length_app /= in Hlen.
     by rewrite lookup_app_l in Hidx; last lia. }
   apply lookup_lt_Some in Hidx as Hlen.
   rewrite take_app_le; last lia.
@@ -998,65 +993,6 @@ Proof.
   iNext. iIntros "SBphys". iApply "HΦ". iExists hd; by iFrame.
 Qed.
 
-Lemma seq_bag_contains_other_loop_spec :
-  ∀ hd vs v E,
-  {{{ seq_bag_list hd vs }}}
-    seq_bag_contains_other_loop #hd #(oblk_to_lit v) @ E
-  {{{ v', RET #(bool_decide (v' ∈ vs ∧ v' ≠ v));
-      seq_bag_list hd vs }}}.
-Proof.
-  iIntros (hd vs v E Φ) "SBphys HΦ".
-  iLöb as "IH" forall (hd vs).
-  wp_rec. wp_pures.
-  destruct vs as [|b vs].
-  { (* search fail *)
-    simpl. iDestruct "SBphys" as %->. wp_pures.
-    iSpecialize ("HΦ" $! v).
-    by iApply "HΦ". }
-  simpl. iDestruct "SBphys" as (l hd') "(% & SBv & SBnxt & SBphys')".
-  subst. wp_pures. wp_load.
-
-  wp_pures.
-  destruct (decide (b = v)); subst; last first.
-  { (* search success *)
-    rewrite bool_decide_eq_false_2; last by congruence.
-    iSpecialize ("HΦ" $! b).
-    rewrite bool_decide_eq_true_2; last first.
-    { split; [apply elem_of_cons; by left|done]. }
-    wp_pures. iModIntro.
-    iApply "HΦ". by repeat (iExists _; iFrame). }
-  replace (bool_decide (v = v)) with true; last first.
-  { rewrite bool_decide_eq_true_2; congruence. }
-  wp_pures. wp_load.
-
-  iApply ("IH" $! hd' vs with "[SBphys']"); auto.
-  iNext. iIntros (v') "SBphys".
-  iSpecialize ("HΦ" $! v').
-  replace (bool_decide (v' ∈ vs ∧ v' ≠ v)) with (bool_decide (v' ∈ v::vs ∧ v' ≠ v)); last first.
-  { destruct (decide (v' = v)).
-    - rewrite bool_decide_eq_false_2. 2: intros [_ ?]; congruence.
-      rewrite bool_decide_eq_false_2; auto. intros [_ ?]; congruence.
-    - destruct (decide (v' ∈ vs)).
-      + rewrite bool_decide_eq_true_2; last first.
-        { split; [apply elem_of_cons; by right|done]. }
-        rewrite bool_decide_eq_true_2; done.
-      + rewrite bool_decide_eq_false_2; last first.
-        { intros [In _]. apply elem_of_cons in In. destruct In; congruence. }
-        rewrite bool_decide_eq_false_2; auto. intros [? _]; congruence.
-  }
-  iApply "HΦ". iExists l, hd'; by iFrame.
-Qed.
-
-Lemma seq_bag_contains_other_spec :
-  seq_bag_contains_other_spec' SeqBag.
-Proof.
-  iIntros (seqBag vs v E Φ) "SB HΦ";
-    iDestruct "SB" as (hd) "(SBhd & SBphys)".
-  wp_rec. wp_pures. wp_load. wp_let.
-  iApply (seq_bag_contains_other_loop_spec hd vs v with "SBphys"); auto.
-  iNext. iIntros (v') "SBphys". iApply "HΦ". iExists hd; by iFrame.
-Qed.
-
 End slot_bag.
 
 Definition slot_bag_impl Σ `{!heapGS Σ, !slot_bag_olocG Σ}
@@ -1087,5 +1023,4 @@ Definition slot_bag_impl Σ `{!heapGS Σ, !slot_bag_olocG Σ}
   spec_slot_bag_oloc.seq_bag_add_spec := seq_bag_add_spec;
 
   spec_slot_bag_oloc.seq_bag_contains_spec := seq_bag_contains_spec;
-  spec_slot_bag_oloc.seq_bag_contains_other_spec := seq_bag_contains_other_spec;
 |}.

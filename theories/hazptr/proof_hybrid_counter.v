@@ -15,10 +15,10 @@ Local Open Scope Z.
 Definition oneshotR := csumR fracR (agreeR unitO).
 
 Class hcounterG Σ := HCounterG {
-  hcounter_inG :> inG Σ oneshotR;
-  hcounter_ghost_varG :> ghost_varG Σ nat;
-  hcounter_mono_listG:> mono_listG (gname * loc) Σ;
-  hcounter_mono_natG :> mono_natG Σ;
+  #[local] hcounter_inG :: inG Σ oneshotR;
+  #[local] hcounter_ghost_varG :: ghost_varG Σ nat;
+  #[local] hcounter_mono_listG:: mono_listG (gname * loc) Σ;
+  #[local] hcounter_mono_natG :: mono_natG Σ;
 }.
 
 Definition hcounterΣ : gFunctors := #[GFunctor oneshotR; ghost_varΣ nat; mono_listΣ (gname * loc); mono_natΣ].
@@ -91,7 +91,7 @@ Definition HCounterInternalInv (γz γn γm γx : gname) (c : loc) : iProp :=
     node_status γ_l x i_l ∗
     ([∗ list] i_old ↦ old ∈ olds,
       node_info γn old.1 old.2 i_old ∗ shot old.1) ∗
-    mono_list_auth_own γn 1 (olds ++ [(γ_l, blk_to_loc l)]) ∗
+    mono_list_auth_own γn 1 (olds ++ [(γ_l, Loc.blk_to_loc l)]) ∗
     mono_nat_auth_own γm 1 i_l ∗
     ⌜ (length olds = i_l)%nat ∧
       NoDup (olds.*1 ++ [γ_l]) ⌝
@@ -220,13 +220,13 @@ Proof.
   rewrite array_cons array_singleton. iDestruct "c↦" as "[c.n↦ c.d↦]".
   wp_let.
   wp_alloc l as "l↦" "†l". rewrite array_singleton. wp_let. wp_store.
-  wp_op. rewrite loc_add_0. wp_store.
+  wp_op. rewrite Loc.add_0. wp_store.
   iMod (mono_list_own_alloc []) as (γn) "[●n _]".
   wp_op.
   wp_store.
-  iMod (mapsto_persist with "c.d↦") as "#c.d↦".
+  iMod (pointsto_persist with "c.d↦") as "#c.d↦".
   iMod (own_alloc (Cinl 1%Qp)) as (γ_l) "Tok_l"; [done|].
-  iMod (mono_list_auth_own_update_app [(γ_l,blk_to_loc l)] with "●n") as "[●n #◯n]". simpl.
+  iMod (mono_list_auth_own_update_app [(γ_l,Loc.blk_to_loc l)] with "●n") as "[●n #◯n]". simpl.
   iAssert (node_status γ_l 0 0 ∗ node_status γ_l 0 0)%I with "[Tok_l]" as "[St_l_C St_l_P]".
   { iDestruct "Tok_l" as "[Tok_l_C Tok_l_P]". iSplitL "Tok_l_C"; iLeft; by iFrame. }
   iEval (rewrite -array_singleton) in "l↦".
@@ -256,7 +256,7 @@ Proof using All.
 
   wp_lam. wp_op. wp_load. wp_let.
   wp_apply (hazptr.(shield_new_spec) with "IHD [//]") as (s) "S"; [solve_ndisj|].
-  wp_let. wp_op. rewrite loc_add_0.
+  wp_let. wp_op. rewrite Loc.add_0.
 
   (* start hcounter loop *)
   move: Deactivated => s_st.
@@ -276,12 +276,12 @@ Proof using All.
   1: instantiate (1 := [tele_arg (Some _); _; _; _]). all: simpl.
   { iFrame. }
   { iIntros "(c.n↦ & G_l) !>". iSplitR "AU".
-    - repeat iExists _. by iFrame "∗#%".
+    - repeat iExists _. iFrame "∗#%". rewrite fmap_app. simpl. rewrite -Holds1 snoc_lookup. done.
     - iFrame. }
   iIntros "(c.n↦ & G_l & S) !>". iSplitR "AU S".
-  { repeat iExists _. by iFrame "∗#%". }
+  { repeat iExists _. iFrame "∗#%". rewrite fmap_app. simpl. rewrite -Holds1 snoc_lookup. done. }
   clear x.
-  iIntros "_". wp_let.
+  wp_let.
 
   (* read *)
   wp_bind (! _)%E.
@@ -334,11 +334,14 @@ Proof using All.
         { repeat iExists _. by iFrame "∗#%". }
         iModIntro.
         iSplitR "CloseS HΦ l↦ S".
-        { repeat iExists _. by iFrame "∗#%". }
+        { repeat iExists _. iFrame "∗#%". iPureIntro.
+        rewrite fmap_app. simpl. rewrite -Holds1 snoc_lookup.
+        repeat (split; try (done||lia)). }
         iEval (rewrite -array_singleton) in "l↦".
         iMod ("CloseS" with  "[$l↦]") as "_".
-        { iSplit; [done|]. iNext. iExists _,_. iFrame "#". iPureIntro.
-          repeat f_equal. lia. }
+        { iSplit; [done|]. iNext. iFrame "#". iPureIntro.
+          rewrite fmap_app. simpl. rewrite -Holds1 snoc_lookup.
+          repeat (split; repeat f_equal; try (done||lia)). }
         iModIntro. wp_pures.
         wp_apply (hazptr.(shield_drop_spec) with "IHD S") as "_"; [solve_ndisj|].
         wp_pures.
@@ -350,11 +353,18 @@ Proof using All.
         { iModIntro. iRight. by iSplit. }
         iModIntro.
         iSplitR "CloseS AU l↦ S".
-        { repeat iExists _. by iFrame "∗#%". }
+        { iFrame "∗#%". iPureIntro.
+          repeat (split; repeat f_equal; try (done||lia)).
+          all: try rewrite fmap_app; simpl; try rewrite -Holds1 snoc_lookup.
+          all: done.
+        }
         iEval (rewrite -array_singleton) in "l↦".
         iMod ("CloseS" with  "[$l↦]") as "_".
-        { iSplit; [done|]. iNext. iExists _,_. iFrame "#". done. }
-        iModIntro. wp_pure. wp_if.
+        { iSplit; [done|]. iNext. iFrame "#". iPureIntro.
+          rewrite fmap_app. simpl. rewrite -Holds1 snoc_lookup.
+          repeat (split; repeat f_equal; try (done||lia)).
+        }
+        iModIntro. wp_pures.
         wp_apply ("IH" with "AU S").
 
     + (* node changed → the old node's value must've changed too → CAS fails → loop *)
@@ -362,7 +372,7 @@ Proof using All.
       (* The node number must've changed, and it must be higher since it
       increases monotonically. *)
       iDestruct (node_info_disagree with "Info_l Info_l'") as %[NE_γ_l NE_i_l].
-      { unfold not. intros H. by inversion H. }
+      { unfold not. by inversion 1. }
       iDestruct (mono_list_auth_lb_valid with "●n ◯n") as %[_ PF_olds].
       apply prefix_app_same_length in PF_olds; auto.
       iDestruct (mono_nat_lb_own_valid with "●m ◯m") as %[_ LE_i_l]. iClear "◯m".
@@ -422,22 +432,22 @@ Proof using All.
 
       wp_cmpxchg_suc. { naive_solver. }
       (* update ghosts *)
-      set olds'' := olds' ++ [(γ_l, blk_to_loc l)].
+      set olds'' := olds' ++ [(γ_l, Loc.blk_to_loc l)].
       iMod (token_alloc olds''.*1) as (γ_n Hγ_l) "Tok_n".
       rewrite fmap_app /= in Hγ_l.
-      iMod (mono_list_auth_own_update_app [(γ_n,blk_to_loc n)] with "●n") as "[●n #◯n]".
+      iMod (mono_list_auth_own_update_app [(γ_n,Loc.blk_to_loc n)] with "●n") as "[●n #◯n]".
       iMod (mono_nat_own_update (i_l + 1) with "●m") as "[●m _]"; [lia|].
       iAssert (node_status γ_n _ _ ∗ node_status γ_n _ _)%I with "[Tok_n]" as "[St_n_C St_n_P]".
       { iDestruct "Tok_n" as "[Tok_n_C ?]". iSplitL "Tok_n_C"; iLeft; by iFrame. }
       have ? : length olds'' = (length olds' + 1)%nat.
-      { rewrite app_length //. }
-      have ? : (olds'' ++ [(γ_n, blk_to_loc n)]) !! (length olds' + 1)%nat = Some (γ_n, blk_to_loc n).
+      { rewrite length_app //. }
+      have ? : (olds'' ++ [(γ_n, Loc.blk_to_loc n)]) !! (length olds' + 1)%nat = Some (γ_n, Loc.blk_to_loc n).
       { by apply list_lookup_middle. }
       have ? : NoDup (olds''.*1 ++ [γ_n]).
       { unfold olds''. rewrite fmap_app /=.
         eapply NoDup_app. split_and!; [done|set_solver|auto]. }
       iAssert (node_info γn γ_n n (i_l+1)) as "Info_n"; first by eauto 10 with iFrame subst.
-      iDestruct (big_sepL_snoc _ _ (γ_l, blk_to_loc l) with "[$Shots $Shot_l]") as "Shots"; eauto with iFrame subst.
+      iDestruct (big_sepL_snoc _ _ (γ_l, Loc.blk_to_loc l) with "[$Shots $Shot_l]") as "Shots"; eauto with iFrame subst.
       iEval (rewrite -array_singleton) in "n↦".
       iMod (hazptr.(hazard_domain_register) (node γn) with "IHD [$n↦ $†n St_n_P]") as "G_n"; [solve_ndisj|..].
       { iExists _,_. iFrame "∗#". iPureIntro. repeat f_equal. lia. }
@@ -453,7 +463,7 @@ Proof using All.
       { repeat iExists _. iFrame "∗#%".
         rewrite (_ : i_l * 2 + 1 + 1 = (i_l + 1) * 2)%nat; [|lia].
         iFrame. iPureIntro. split.
-        - rewrite app_length. simpl. rewrite Holds'1. done.
+        - rewrite length_app. simpl. rewrite Holds'1. done.
         - subst olds''. done.
       }
       wp_pures.

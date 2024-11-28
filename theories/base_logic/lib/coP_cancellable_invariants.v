@@ -4,14 +4,15 @@ From iris.base_logic.lib Require Export invariants.
 From iris.prelude Require Import options.
 Import uPred.
 
-Class coP_cinvG Σ := coP_cinv_inG :> inG Σ coPneset_disjR.
+Class coP_cinvG Σ := { #[local] coP_cinv_inG :: inG Σ coPneset_disjR }.
+
 Definition coP_cinvΣ : gFunctors := #[GFunctor coPneset_disjR].
 
 Global Instance subG_coP_cinvΣ {Σ} : subG coP_cinvΣ Σ → coP_cinvG Σ.
 Proof. solve_inG. Qed.
 
 Section defs.
-  Context `{!invGS Σ, !coP_cinvG Σ}.
+  Context `{!invGS_gen hlc Σ, !coP_cinvG Σ}.
 
   Definition coP_cinv_own (γ : gname) (t : coPneset) : iProp Σ :=
     own γ (CoPNESetDisj t).
@@ -23,7 +24,7 @@ End defs.
 Global Instance: Params (@coP_cinv) 5 := {}.
 
 Section proofs.
-  Context `{!invGS Σ, !coP_cinvG Σ}.
+  Context `{!invGS_gen hlc Σ, !coP_cinvG Σ}.
 
   Global Instance coP_cinv_own_timeless γ p : Timeless (coP_cinv_own γ p).
   Proof. rewrite /coP_cinv_own; apply _. Qed.

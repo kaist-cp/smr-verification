@@ -28,17 +28,17 @@ Definition queue_new_spec' : Prop :=
 Definition queue_push_spec' : Prop :=
   ⊢ ∀ γq qu (x : val),
   IsQueue γq qu -∗
-  <<< ∀∀ xs, Queue γq xs >>>
+  <<{ ∀∀ xs, Queue γq xs }>>
     queue_push #qu x @ ⊤,↑queueN,∅
-  <<< Queue γq (xs ++ [x]), RET #() >>>.
+  <<{ Queue γq (xs ++ [x]) | RET #() }>>.
 
 Definition queue_pop_spec' : Prop :=
   ⊢ ∀ γq qu,
   IsQueue γq qu -∗
-  <<< ∀∀ xs, Queue γq xs >>>
+  <<{ ∀∀ xs, Queue γq xs }>>
     queue_pop #qu @ ⊤,↑queueN,∅
-  <<< Queue γq (match xs with [] => [] | _::xs => xs end),
-      RET (match xs with [] => NONEV | v::_ => SOMEV v end) >>>.
+  <<{ Queue γq (match xs with [] => [] | _::xs => xs end) |
+      RET (match xs with [] => NONEV | v::_ => SOMEV v end) }>>.
 End spec.
 
 Record queue_code : Type := QueueCode {

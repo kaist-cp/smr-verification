@@ -31,19 +31,19 @@ Definition stack_new_spec' : Prop :=
 Definition stack_push_spec' : Prop :=
   ⊢ ∀ γe γs st g (x : val),
   IsStack γe γs st -∗ rcu.(Guard) γe g Deactivated -∗
-  <<< ∀∀ xs, Stack γs xs >>>
+  <<{ ∀∀ xs, Stack γs xs }>>
     stack_push #st x #g @ ⊤,(↑stackN ∪ ↑(ptrsN rcuN)),↑(mgmtN rcuN)
-  <<< Stack γs (x::xs), RET #(), rcu.(Guard) γe g Deactivated >>>.
+  <<{ Stack γs (x::xs) | RET #(); rcu.(Guard) γe g Deactivated }>>.
 
 Definition stack_pop_spec' : Prop :=
   ⊢ ∀ γe γs st g,
   IsStack γe γs st -∗  rcu.(Guard) γe g Deactivated -∗
-  <<< ∀∀ xs, Stack γs xs >>>
+  <<{ ∀∀ xs, Stack γs xs }>>
     stack_pop #st #g @ ⊤,(↑stackN ∪ ↑(ptrsN rcuN)),↑(mgmtN rcuN)
-  <<< Stack γs (match xs with | [] => [] | _::xs => xs end),
-      RET (match xs with | [] => NONEV | v::_ => SOMEV v end),
+  <<{ Stack γs (match xs with | [] => [] | _::xs => xs end) |
+      RET (match xs with | [] => NONEV | v::_ => SOMEV v end);
       rcu.(Guard) γe g Deactivated
-  >>>.
+  }>>.
 
 End spec.
 

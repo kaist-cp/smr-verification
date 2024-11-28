@@ -7,8 +7,8 @@ From iris.prelude Require Import options.
 From smr Require Import helpers ebr.spec_rcu_simple ebr.spec_stack ebr.code_treiber.
 
 Class treiberG Σ := TreiberG {
-  treiber_ghost_varG :> ghost_varG Σ (list val);
-  treiber_inG :> inG Σ (agreeR (prodO valO (optionO blkO)));
+  #[local] treiber_ghost_varG :: ghost_varG Σ (list val);
+  #[local] treiber_inG :: inG Σ (agreeR (prodO valO (optionO blkO)));
 }.
 
 Definition treiberΣ : gFunctors := #[ghost_varΣ (list val); GFunctor (agreeR (prodO valO (optionO blkO)))].
@@ -93,12 +93,12 @@ Proof.
   do 2 (wp_apply (wp_store_offset with "st↦") as "st↦"; [by simplify_list_eq|]; wp_pures).
   rewrite /= array_cons array_singleton.
   iDestruct "st↦" as "[st.h↦ st.d↦]".
-  iMod (mapsto_persist with "st.d↦") as "#st.d↦".
+  iMod (pointsto_persist with "st.d↦") as "#st.d↦".
   iMod (ghost_var_alloc []) as (γs) "[γs γs_I]".
   iAssert (TStack γs []) with "[γs_I]" as "S"; first by iFrame.
   iMod (inv_alloc treiberN _ (TStackInternalInv _ _ _) with "[-HΦ S]") as "#Inv".
-  { iNext. iExists None, []. rewrite loc_add_0. iFrame "∗#". }
-  iModIntro. iApply "HΦ". iFrame "∗#%". exfr.
+  { iNext. iExists None, []. rewrite Loc.add_0. iFrame "∗#". }
+  iModIntro. iApply "HΦ". iFrame "∗#%".
 Qed.
 
 Lemma tstack_push_spec :

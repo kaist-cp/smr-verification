@@ -7,19 +7,16 @@ Section harris_michael_find.
 
 Definition hm_find_inner : val :=
   rec: "loop" "p" "key" "prev" "curr" :=
-    let: "p'" := NewProph in
-    let: "next" := !("curr" +ₗ #next) in
-    let: "tagged" := (tag "next") ≠ #0 in
-    resolve_proph: "p" to: "tagged" ;;
-    if: "tagged" then
+    let: "next" := Resolve !("curr" +ₗ #next) "p" #() in
+    if: (tag "next") ≠ #0 then
       (if: CAS ("prev" +ₗ #next) "curr" ("next" `tag` #0) then
-        "loop" "p'" "key" "prev" ("next" `tag` #0)
+        "loop" "p" "key" "prev" ("next" `tag` #0)
        else
         NONE)
     else
       let: "curr_key" := !("curr" +ₗ #key) in
       if: "curr_key" < "key" then
-        "loop" "p'" "key" "curr" "next"
+        "loop" "p" "key" "curr" "next"
       else
         SOME ("curr_key" = "key", "prev", "curr")
 .

@@ -7,8 +7,8 @@ From iris.prelude Require Import options.
 From smr Require Import helpers hazptr.spec_hazptr hazptr.spec_stack hazptr.code_treiber.
 
 Class treiberG Σ := TreiberG {
-  treiber_ghost_varG :> ghost_varG Σ (list val);
-  treiber_inG :> inG Σ (agreeR (prodO valO (optionO blkO)));
+  #[local] treiber_ghost_varG :: ghost_varG Σ (list val);
+  #[local] treiber_inG :: inG Σ (agreeR (prodO valO (optionO blkO)));
 }.
 
 Definition treiberΣ : gFunctors := #[ghost_varΣ (list val); GFunctor (agreeR (prodO valO (optionO blkO)))].
@@ -93,12 +93,12 @@ Proof.
   do 2 (wp_apply (wp_store_offset with "st↦") as "st↦"; [by simplify_list_eq|]; wp_pures).
   rewrite /= array_cons array_singleton.
   iDestruct "st↦" as "[st.h↦ st.d↦]".
-  iMod (mapsto_persist with "st.d↦") as "#st.d↦".
+  iMod (pointsto_persist with "st.d↦") as "#st.d↦".
   iMod (ghost_var_alloc []) as (γs) "[γs γs_I]".
   remember (encode (γz, γs)) as γ eqn:Hγ.
   iAssert (TStack γ []) with "[γs_I]" as "S"; first by exfr.
   iMod (inv_alloc treiberN _ (TStackInternalInv _ _ _) with "[-HΦ S]") as "#Inv".
-  { iNext. iExists None, []. rewrite loc_add_0. iFrame "∗#". }
+  { iNext. iExists None, []. rewrite Loc.add_0. iFrame "∗#". }
   iModIntro. iApply "HΦ". iFrame "∗". exfr.
 Qed.
 
@@ -187,10 +187,10 @@ Proof using All.
     iIntros "[st.h↦ S]".
     (* close inv *)
     iModIntro. iSplitL "Nodes st.h↦ γs'"; first by (iExists None; exfr).
-    iIntros "_". wp_pures.
+    wp_pures.
     wp_apply (hazptr.(shield_drop_spec) with "IHD S") as "_"; [solve_ndisj|].
     wp_pures.
-    iApply "HΦ". by iFrame. }
+    iApply "HΦ". }
 
   (* prove AACC of [protect] for non-empty stack case and restore AU *)
   iDestruct "Nodes" as (γ_h1 n1) "(G_h1 & #Info_h1 & Nodes)".
@@ -202,7 +202,7 @@ Proof using All.
   iIntros "(st.h↦ & G_h1 & S) !>".
   iSplitL "Nodes st.h↦ γs G_h1"; first by (iExists (Some _); exfr).
 
-  iIntros "_". wp_pures. wp_bind (! _)%E.
+  wp_pures. wp_bind (! _)%E.
   wp_apply (shield_read with "S") as (??) "(S & #Info_h1' & %EQ)"; [solve_ndisj|lia|].
   iDestruct "Info_h1'" as (x2 n2) "[-> Info_h1']".
 
@@ -238,7 +238,7 @@ Proof using All.
     wp_pures.
 
     wp_apply (hazptr.(shield_drop_spec) with "IHD S") as "_"; [solve_ndisj|].
-    wp_pures. iApply "HΦ". done.
+    wp_pures. iApply "HΦ".
 
   - (* failed CAS; restore AU *)
     wp_cmpxchg_fail.

@@ -19,7 +19,7 @@ Definition sid := Pos.of_succ_nat.
 (* Shield ids of slots [0..s] (exclusive) *)
 Definition sids_to (s : nat) : coPset :=
   list_to_set (sid <$> (seq 0 s)).
-(* Set of shield ids of slots [s..∞]. Example: [sidx_ex (length slist)] *)
+(* Set of shield ids of slots [s..∞]. Example: [sids_from (length slist)] *)
 Definition sids_from (s : nat) : coPset :=
   ⊤ ∖ sids_to s.
 
@@ -48,15 +48,15 @@ Definition gtok γ (i : positive) : iProp Σ :=
 End token.
 
 Class reclamationG Σ := ReclamationG {
-  recl_tokenG :> token2G Σ;
+  #[export] recl_tokenG :: token2G Σ;
   (* id ↪□ (allocation, cinv gname) *)
-  recl_infoG :> ghost_mapG Σ positive (alloc * gname); (* γinfo *)
-  recl_dataG :> ghost_mapG Σ positive gname; (* γdata *)
+  #[export] recl_infoG :: ghost_mapG Σ positive (alloc * gname); (* γinfo *)
+  #[export] recl_dataG :: ghost_mapG Σ positive gname; (* γdata *)
   (* allocation status *)
-  recl_ptrsG :> coP_ghost_mapG Σ blk positive; (* γptrs *)
-  recl_cinvG :> coP_cinvG Σ; (* γtok *)
-  recl_varsG :> ghost_varsG Σ bool; (* γU *)
-  recl_vars2G :> ghost_vars2G Σ bool; (* γV, γR *)
+  #[export] recl_ptrsG :: coP_ghost_mapG Σ blk positive; (* γptrs *)
+  #[export] recl_cinvG :: coP_cinvG Σ; (* γtok *)
+  #[export] recl_varsG :: ghost_varsG Σ bool; (* γU *)
+  #[export] recl_vars2G :: ghost_vars2G Σ bool; (* γV, γR *)
 }.
 
 Definition reclamationΣ : gFunctors :=
@@ -406,9 +406,9 @@ Lemma big_sepL_sids_range_1 {PROP : bi} (Φ : coPset → PROP) `{!∀ x, Affine 
   Φ (sids_range s1 s2) -∗ [∗ list] k ↦ _ ∈ slist12, Φ {[sid (s1 + k)]}.
 Proof.
   iIntros (Hhomo Hlen) "range12".
-  iInduction slist12 as [|] "IH" forall (s1 s2 Hlen).
+  iInduction slist12 as [|? ? IH] forall (s1 s2 Hlen).
   { rewrite big_sepL_nil //. }
-  rewrite cons_length in Hlen.
+  rewrite length_cons in Hlen.
   have LE12 : s1 < s2 by lia.
   have {}Hlen : length slist12 = s2 - (s1 + 1) by lia.
   rewrite big_sepL_cons. rewrite Nat.add_0_r.
@@ -434,10 +434,10 @@ Proof.
             ⌜slist12 = []⌝ ∨ Φ (sids_range s1 s2); last first.
   { iIntros (NE) "X". iDestruct (HH with "X") as "[%|?]"; done. }
   iIntros "range12".
-  iInduction slist12 as [|] "IH" forall (s1 s2 Hlen).
+  iInduction slist12 as [|? ? IH] forall (s1 s2 Hlen).
   { rewrite big_sepL_nil //. by iLeft. }
   iRight.
-  rewrite cons_length in Hlen.
+  rewrite length_cons in Hlen.
   have LE12 : s1 < s2 by lia.
   have {}Hlen : length slist12 = s2 - (s1 + 1) by lia.
   rewrite big_sepL_cons. rewrite Nat.add_0_r.

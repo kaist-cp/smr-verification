@@ -36,38 +36,38 @@ Definition deque_new_spec' : Prop :=
 Definition deque_push_spec' : Prop :=
   ⊢ ∀ γe γ q g (x : val),
   IsDeque γe γ q -∗ OwnDeque γ q -∗ rcu.(Guard) γe g Deactivated -∗
-  <<< ∀∀ xs, deque γ xs >>>
+  <<{ ∀∀ xs, deque γ xs }>>
     deque_push #q x #g @ ⊤,(↑dequeN ∪ ↑(ptrsN rcuN)),↑(mgmtN rcuN)
-  <<< deque γ (xs ++ [x]),
-    RET #(), OwnDeque γ q ∗ rcu.(Guard) γe g Deactivated >>>.
+  <<{ deque γ (xs ++ [x]) |
+      RET #(); OwnDeque γ q ∗ rcu.(Guard) γe g Deactivated }>>.
 
 Definition deque_pop_spec' : Prop :=
   ⊢ ∀ γe γ q g,
   IsDeque γe γ q -∗ OwnDeque γ q -∗ rcu.(Guard) γe g Deactivated -∗
-  <<< ∀∀ xs, deque γ xs >>>
+  <<{ ∀∀ xs, deque γ xs }>>
     deque_pop #q #g @ ⊤,(↑dequeN ∪ ↑(ptrsN rcuN)),↑(mgmtN rcuN)
-  <<< ∃∃ (xs' : list val) (ov : val),
+  <<{ ∃∃ (xs' : list val) (ov : val),
         deque γ xs' ∗
         match ov with
         | NONEV => ⌜xs = xs'⌝
         | SOMEV v => ⌜xs = xs' ++ [v]⌝
         | _ => False
-        end,
-      RET ov, OwnDeque γ q ∗ rcu.(Guard) γe g Deactivated >>>.
+        end |
+      RET ov; OwnDeque γ q ∗ rcu.(Guard) γe g Deactivated }>>.
 
 Definition deque_steal_spec' : Prop :=
   ⊢ ∀ γe γ q g,
   IsDeque γe γ q -∗ rcu.(Guard) γe g Deactivated -∗
-  <<< ∀∀ xs, deque γ xs >>>
+  <<{ ∀∀ xs, deque γ xs }>>
     deque_pop #q #g @ ⊤,(↑dequeN ∪ ↑(ptrsN rcuN)),↑(mgmtN rcuN)
-  <<< ∃∃ (xs' : list val) (ov : val),
+  <<{ ∃∃ (xs' : list val) (ov : val),
         deque γ xs' ∗
         match ov with
         | NONEV => ⌜xs = xs'⌝
         | SOMEV v => ⌜xs = [v] ++ xs'⌝
         | _ => False
-        end,
-      RET ov, rcu.(Guard) γe g Deactivated >>>.
+        end |
+      RET ov; rcu.(Guard) γe g Deactivated }>>.
 End spec.
 
 Record deque_code : Type := dequeCode {

@@ -60,13 +60,13 @@ Section instances.
   Proof.
     do 2 iStep. iExists _; iSplit; last done. rename x into vs.
     iAssert (∀ i, array_construction l i vs -∗ (l +ₗ i) ↦∗ vs)%I as "G". {
-      iInduction vs as [| x vs'] "IH"; unfold array; [auto| ].
-      iIntros (?) "AC". simpl. rewrite loc_add_assoc. replace (i + 0%nat)%Z with i; last lia. iDestruct "AC" as "[$ AC']".
-      iDestruct ("IH" with "AC'") as "big_l↦". iApply (big_sepL_mono with "big_l↦"). iIntros. repeat rewrite loc_add_assoc.
+      iInduction vs as [| x vs' IH]; unfold array; [auto| ].
+      iIntros (?) "AC". simpl. rewrite Loc.add_assoc. replace (i + 0%nat)%Z with i; last lia. iDestruct "AC" as "[$ AC']".
+      iDestruct ("IH" with "AC'") as "big_l↦". iApply (big_sepL_mono with "big_l↦"). iIntros. repeat rewrite Loc.add_assoc.
       replace (i + S k)%Z with (i + 1 + k)%Z; last lia. done.
     }
     iSpecialize ("G" with "H2"). unfold array. iFrame. iApply (big_sepL_mono with "G").
-    iSteps. rewrite loc_add_assoc.
+    iSteps. rewrite Loc.add_assoc.
     have <-: (1 + x = S x)%Z; first lia. done.
   Qed.
 
@@ -88,17 +88,17 @@ Section instances.
   Proof. unfold array. iSteps. Qed.
 
   Section mergable.
-    Global Instance mergable_consume_mapsto_persist l v1 v2 :
+    Global Instance mergable_consume_pointsto_persist l v1 v2 :
       MergableConsume (l ↦□ v1)%I true (λ p Pin Pout, TCAnd (TCEq Pin (l ↦□ v2)) (TCEq Pout (l ↦□ v1 ∗ ⌜v1 = v2⌝)))%I | 40.
     Proof.
       rewrite /MergableConsume => p Pin Pout [-> ->].
       rewrite bi.intuitionistically_if_elim.
       iStepS.
-      iDestruct (mapsto_combine with "H1 H2") as "[H ->]".
+      iDestruct (pointsto_combine with "H1 H2") as "[H ->]".
       iStepsS.
     Qed.
 
-    Global Instance mergable_consume_mapsto_own q1 q2 q l v1 v2 :
+    Global Instance mergable_consume_pointsto_own q1 q2 q l v1 v2 :
       MergableConsume (l ↦{#q1} v1)%I true (λ p Pin Pout,
           TCAnd (TCEq Pin (l ↦{#q2} v2)) $
           TCAnd (proofmode_classes.IsOp (A := fracR) q q1 q2) $
@@ -107,23 +107,23 @@ Section instances.
       rewrite /MergableConsume => p Pin Pout [-> [+ ->]].
       rewrite bi.intuitionistically_if_elim => Hq.
       iStepS.
-      iDestruct (mapsto_combine with "H1 H2") as "[H ->]".
+      iDestruct (pointsto_combine with "H1 H2") as "[H ->]".
       rewrite dfrac_op_own Hq.
       iStepsS.
     Qed.
 
-    Global Instance mergable_persist_mapsto_dfrac_own q1 dq2 l v1 v2 :
+    Global Instance mergable_persist_pointsto_dfrac_own q1 dq2 l v1 v2 :
       MergablePersist (l ↦{#q1} v1)%I (λ p Pin Pout, TCAnd (TCEq Pin (l ↦{dq2} v2)) (TCEq Pout ⌜v1 = v2 ∧ q1 < 1⌝%Qp))%I | 50.
     Proof.
       rewrite /MergableConsume => p Pin Pout [-> ->].
       rewrite bi.intuitionistically_if_elim.
       iStepS.
-      iDestruct (mapsto_combine with "H1 H2") as "[H ->]".
-      iDestruct (mapsto_valid with "H") as %?%dfrac_valid_own_l.
+      iDestruct (pointsto_combine with "H1 H2") as "[H ->]".
+      iDestruct (pointsto_valid with "H") as %?%dfrac_valid_own_l.
       iStepsS.
     Qed.
 
-    Global Instance mergable_persist_mapsto_dfrac_own2 q1 dq2 l v1 v2 :
+    Global Instance mergable_persist_pointsto_dfrac_own2 q1 dq2 l v1 v2 :
       MergablePersist (l ↦{dq2} v1)%I (λ p Pin Pout, TCAnd (TCEq Pin (l ↦{#q1} v2)) (TCEq Pout ⌜v1 = v2 ∧ q1 < 1⌝%Qp))%I | 50.
     Proof.
       rewrite /MergableConsume => p Pin Pout [-> ->].
@@ -132,13 +132,13 @@ Section instances.
     Qed.
 
     (* this last instance is necessary for opaque dq1 and dq2 *)
-    Global Instance mergable_persist_mapsto_last_resort dq1 dq2 l v1 v2 :
+    Global Instance mergable_persist_pointsto_last_resort dq1 dq2 l v1 v2 :
       MergablePersist (l ↦{dq1} v1)%I (λ p Pin Pout, TCAnd (TCEq Pin (l ↦{dq2} v2)) (TCEq Pout ⌜v1 = v2⌝))%I | 99.
     Proof.
       rewrite /MergableConsume => p Pin Pout [-> ->].
       rewrite bi.intuitionistically_if_elim.
       iStepS.
-      iDestruct (mapsto_combine with "H1 H2") as "[H ->]".
+      iDestruct (pointsto_combine with "H1 H2") as "[H ->]".
       iStepsS.
     Qed.
 
@@ -166,7 +166,7 @@ Section instances.
   End mergable.
 
   Section biabds.
-    Global Instance mapsto_val_may_need_more (l : loc) (v1 v2 : val) (q1 q2 : Qp) mq q :
+    Global Instance pointsto_val_may_need_more (l : loc) (v1 v2 : val) (q1 q2 : Qp) mq q :
       FracSub q2 q1 mq →
       TCEq mq (Some q) →
       HINT l ↦{#q1} v1 ✱ [v'; ⌜v1 = v2⌝ ∗ l ↦{#q} v'] ⊫ [id]; l ↦{#q2} v2 ✱ [⌜v1 = v2⌝ ∗ ⌜v' = v1⌝] | 55.
@@ -175,7 +175,7 @@ Section instances.
       iStepsS.
     Qed.
 
-    Global Instance mapsto_val_have_enough (l : loc) (v1 v2 : val) (q1 q2 : Qp) mq :
+    Global Instance pointsto_val_have_enough (l : loc) (v1 v2 : val) (q1 q2 : Qp) mq :
       FracSub q1 q2 mq →
       HINT l ↦{#q1} v1 ✱ [- ; ⌜v1 = v2⌝] ⊫ [id]; l ↦{#q2}v2 ✱ [⌜v1 = v2⌝ ∗ match mq with | Some q => l ↦{#q} v1 | _ => True end] | 54.
     Proof.
@@ -196,21 +196,21 @@ Section instances.
       OffsetLoc li1 i2 (l +ₗ (i1 + i2)).
     Proof.
       rewrite /OffsetLoc => ->.
-      rewrite loc_add_assoc //.
+      rewrite Loc.add_assoc //.
     Qed.
 
-    Global Instance as_persistent_mapsto p l q v :
+    Global Instance as_persistent_pointsto p l q v :
       HINT □⟨p⟩ l ↦{q} v ✱ [- ; emp] ⊫ [bupd]; l ↦□ v ✱ [l ↦□ v] | 100.
     Proof.
       iIntros "Hl" => /=.
       rewrite /= right_id bi.intuitionistically_if_elim.
-      iMod (mapsto_persist with "Hl") as "#Hl".
+      iMod (pointsto_persist with "Hl") as "#Hl".
       iStepsS.
     Qed.
 
     Global Arguments array : simpl never. (* we don't want cbn to expand array *)
 
-    Global Instance array_mapsto_head l v vs q l' :
+    Global Instance array_pointsto_head l v vs q l' :
       OffsetLoc l 1 l' → (* this makes us get (l +ₗ (1 + 1)) instead of ((l +ₗ 1) +ₗ 1) *)
       HINT l ↦∗{q} vs ✱ [- ; ⌜hd_error vs = Some v⌝] ⊫ [id]; l ↦{q} v ✱ [l' ↦∗{q} tail vs ∗ ⌜hd_error vs = Some v⌝] | 20.
     Proof.
@@ -221,7 +221,7 @@ Section instances.
       case: H => ->. iStepsS.
     Qed.
 
-    Global Instance head_mapsto_array l v vs q l' :
+    Global Instance head_pointsto_array l v vs q l' :
       OffsetLoc l 1 l' →
       HINT l ↦{q} v ✱ [- ; ⌜hd_error vs = Some v⌝ ∗ l' ↦∗{q} tail vs] ⊫ [id]; l ↦∗{q} vs ✱ [emp] | 20.
     Proof.
@@ -233,7 +233,7 @@ Section instances.
       iStepsS.
     Qed.
 
-    Global Instance array_mapsto_head_offset l v vs q i l':
+    Global Instance array_pointsto_head_offset l v vs q i l':
       SolveSepSideCondition (0 ≤ i < length vs)%Z →               (* that this is_Some is given, but that it is equal to v is a proof obligation *)
       OffsetLoc l (Z.succ i) l' →
       HINT l ↦∗{q} vs ✱ [ - ; ⌜vs !! Z.to_nat i = Some v⌝] ⊫ [id]; (l +ₗ i) ↦{q} v ✱ [
@@ -243,10 +243,10 @@ Section instances.
       iStepS.
       rewrite -{1}(take_drop_middle _ _ _ H).
       rewrite array_app array_cons; iRevert "H1"; iStepS.
-      rewrite take_length_le; last lia.
+      rewrite length_take_le; last lia.
       rewrite Z2Nat.id; last lia.
       iStepsS.
-      rewrite loc_add_assoc.
+      rewrite Loc.add_assoc.
       iStepsS.
     Qed.
 

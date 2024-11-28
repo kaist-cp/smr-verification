@@ -12,9 +12,9 @@ Set Printing Projections.
 Local Open Scope nat_scope.
 
 Class msG Σ := MSG {
-  ms_inG :> inG Σ (agreeR natO);
-  ms_mono_listG :> mono_listG (gname * blk * val) Σ;
-  ms_mono_natG :> mono_natG Σ;
+  #[local] ms_inG :: inG Σ (agreeR natO);
+  #[local] ms_mono_listG :: mono_listG (gname * blk * val) Σ;
+  #[local] ms_mono_natG :: mono_natG Σ;
 }.
 
 Definition msΣ : gFunctors := #[GFunctor (agreeR natO); mono_listΣ (gname * blk *val); mono_natΣ].
@@ -157,9 +157,9 @@ Lemma Nodes_insert {γe γcl} CL ih i_p γ_p p x_p :
 Proof.
   iIntros (? ->) "Nodes G_p Idx_p".
   unfold Nodes. rewrite !fmap_drop fmap_app /=.
-  rewrite drop_app_le; last by rewrite fmap_length.
+  rewrite drop_app_le; last by rewrite length_fmap.
   iApply big_sepL_snoc. iFrame "Nodes".
-  rewrite drop_length fmap_length.
+  rewrite length_drop length_fmap.
   replace (ih + (length CL - ih)) with (length CL) by lia. iFrame.
 Qed.
 
@@ -208,10 +208,10 @@ Proof.
   - iDestruct "Gt_p" as (? [-> ?]) "●CL_T". simpl. iLeft.
     iExists CL. iSplit; [done|]. iFrame "●CL_T". iSplit.
     + iIntros. iExists i_p, x_p, None. iFrame "∗#%". iSplit; [done|]. iLeft. iExists CL. iFrame. done.
-    + iIntros. iExists i_p, x_p, (Some n_p). iFrame "∗#%". iSplit; [done|]. iRight. iExists _,_,_. iFrame "#". done.
+    + iIntros. iExists i_p, x_p, (Some n_p). iFrame "∗#%". iSplit; [done|]. iRight. done.
   - iDestruct "Gt_p" as (n_p γ_n_p x_n_p ->) "#[Idx_n_p Info_n_p]". simpl. iRight.
     iExists _,_,_. iSplit; [done|]. iFrame "#".
-    iIntros. iExists _, x_p, (Some n_p). iFrame "∗#". iSplit; [done|]. iRight. iExists _,_,_. iFrame "#". done.
+    iExists (Some n_p). iFrame "∗#". iSplit; [done|]. iRight. done.
 Qed.
 
 Lemma queue_new_spec :
@@ -222,9 +222,9 @@ Proof.
   wp_apply (wp_store_offset with "s↦") as "s↦"; [by simplify_list_eq|]; wp_pures.
   wp_alloc qu as "qu↦" "†qu"; wp_pures.
   repeat (wp_apply (wp_store_offset with "qu↦") as "qu↦"; [by simplify_list_eq|]; wp_pures).
-  iEval (rewrite !array_cons !loc_add_assoc //) in "qu↦".
+  iEval (rewrite !array_cons !Loc.add_assoc //) in "qu↦".
   iDestruct "qu↦" as "(qu.h↦ & qu.t↦ & qu.d↦ & _)".
-  iMod (mapsto_persist with "qu.d↦") as "#qu.d↦".
+  iMod (pointsto_persist with "qu.d↦") as "#qu.d↦".
   iMod (own_alloc (to_agree 0)) as (γ_s) "#Idx_s"; [done|].
   iMod (mono_list_own_alloc [(γ_s,s,#0)]) as (γcl) "[[●CL_T ●CL] #◯CL]".
   iDestruct (mono_list_idx_own_get 0 with "◯CL") as "Info_s"; [done|].
@@ -406,7 +406,7 @@ Proof using All.
   iAssert (node γcl n _ γ_n) with "[●CL_T]" as "N_n".
   { iExists (it1+1), x, None. iSplit; [done|]. iFrame "Idx_n Info_n". iLeft.
     iExists _. iFrame "●CL_T". iPureIntro. split; [done|].
-    rewrite app_length /=.
+    rewrite length_app /=.
     apply lookup_lt_Some in Hit. (* [length CL1 > 0] *) lia. }
   iMod (rcu.(rcu_domain_register) (node γcl) with "IED [$n↦ $†n $N_n]") as "G_n"; [solve_ndisj|].
 
@@ -417,7 +417,7 @@ Proof using All.
   iMod ("Commit" with "[●CL_Q ●ih_Q]") as "HΦ".
   { repeat iExists _. iFrame "∗#%". iPureIntro.
     subst xs CL1'. rewrite !fmap_drop fmap_app /=.
-    rewrite drop_app_le //. rewrite fmap_length.
+    rewrite drop_app_le //. rewrite length_fmap.
     destruct F1 as [?%lookup_fmap_lt_Some _]. lia. }
   iModIntro. iModIntro.
   iDestruct (Nodes_insert _ _ (it1+1) with "Nodes G_n Idx_n") as "Nodes"; [lia| |].
@@ -494,13 +494,13 @@ Proof using All.
       destruct F1 as (?%lookup_fmap_lt_Some & _).
       destruct PF_CL12 as [L ->].
       rename select (_ < length CL1) into HL. clear -HL.
-      rewrite app_length in HL.
+      rewrite length_app in HL.
       assert (length L = 0) as ->%nil_length_inv by lia.
       by rewrite app_nil_r. }
     assert (xs2 = []) as ->.
     { subst ih2 xs2.
       destruct F2 as (_ & ?%lookup_fmap_lt_Some & _).
-      rewrite fmap_drop drop_ge //. rewrite fmap_length. lia. }
+      rewrite fmap_drop drop_ge //. rewrite length_fmap. lia. }
     (* Commit empty pop *)
     wp_apply (wp_load_offset with "h1↦") as "h1↦"; [by simplify_list_eq|].
     iMod ("Commit" with "[●CL_Q ●ih_Q]") as "HΦ"; first by exfr.
@@ -585,7 +585,6 @@ Proof using All.
     wp_pure. wp_if. wp_apply ("IH" with "AU G"). }
 
   (* protect next *)
-  (* Note: We should be able to do this when we obtain head *)
 
   (* agree *)
   iDestruct (guard_Nodes_agree _ _ ih4 with "h1Info G Idx_h1 Nodes") as "#>[<- <-]"; [by destruct_and! F4..|].

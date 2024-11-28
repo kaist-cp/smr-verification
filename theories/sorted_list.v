@@ -13,13 +13,14 @@ Implicit Types
   (k n m z : A)
   (i j : nat).
 
-Lemma sorted_strict_inc `{!Transitive R} i j L n m :
-  (∀ n, ¬ R n n) → Sorted R L → L !! i = Some n → L !! j = Some m →  R n m ↔ i < j .
+Lemma sorted_strict_inc `{!Transitive R, !Irreflexive R} i j L n m :
+  Sorted R L → L !! i = Some n → L !! j = Some m →  R n m ↔ i < j .
 Proof.
-  intros NOT_DIAG Sorted HLi HLj. split; intros LT.
+  intros Sorted HLi HLj. split; intros LT.
   - apply not_ge => GE.
     destruct (decide (i = j)) as [->|NE].
-    { rewrite HLi in HLj. injection HLj as [= ->]. by specialize (NOT_DIAG m). }
+    { rewrite HLi in HLj. injection HLj as [= ->].
+      apply irreflexivity in LT; done. }
     assert (i > j) as GT by lia.
     assert (R m n) as LT'.
     { apply (elem_of_StronglySorted_app R (take (S j) L) (drop (S j) L) m n).
@@ -27,16 +28,16 @@ Proof.
       - apply elem_of_take; eauto.
       - rewrite elem_of_list_lookup. exists (i - (S j)). rewrite lookup_drop -HLi. f_equal. lia.
     }
-    assert (R m m); [|by specialize (NOT_DIAG m)].
-    transitivity n; done.
+    assert (R m m) as EQ.
+    { transitivity n; done. }
+    apply irreflexivity in EQ; done.
   - apply (elem_of_StronglySorted_app R (take (S i) L) (drop (S i) L) n m).
     + rewrite -(take_drop (S i) L) in Sorted. by apply (Sorted_StronglySorted R).
     + apply elem_of_take. eauto.
     + rewrite elem_of_list_lookup. exists (j - (S i)). rewrite lookup_drop -HLj. f_equal. lia.
 Qed.
 
-Lemma sorted_none_in_middle `{!Transitive R} idx n m k L :
-  (∀ n, ¬ R n n) →
+Lemma sorted_none_in_middle `{!Transitive R, !Irreflexive R} idx n m k L :
   L !! idx = Some n →
   L !! (idx + 1) = Some m →
   R n k →
@@ -44,7 +45,7 @@ Lemma sorted_none_in_middle `{!Transitive R} idx n m k L :
   Sorted R L →
   k ∉ L.
 Proof.
-  intros NOT_DIAG Hn Hm Rnk Rkn Sorted [idx' Hk]%elem_of_list_lookup.
+  intros Hn Hm Rnk Rkn Sorted [idx' Hk]%elem_of_list_lookup.
   assert (idx' < idx + 1).
   { apply (sorted_strict_inc idx' (idx + 1) L k m); auto. }
   assert(idx < idx').
@@ -52,17 +53,17 @@ Proof.
   lia.
 Qed.
 
-Lemma sorted_nodup `{!Transitive R} L :
-  (∀ n, ¬ R n n) → Sorted R L → NoDup L.
+Lemma sorted_nodup `{!Transitive R, !Irreflexive R} L :
+  Sorted R L → NoDup L.
 Proof.
-  induction L as [|z L IH]; intros NOT_DIAG Sorted%Sorted_StronglySorted; auto.
+  induction L as [|z L IH]; intros Sorted%Sorted_StronglySorted; auto.
   { by apply NoDup_nil. }
   replace (z :: L) with ([z] ++ L) in Sorted; [|by simplify_list_eq].
   apply NoDup_cons. split.
   - intros ElemOf.
     apply (elem_of_StronglySorted_app R [z] L z z) in Sorted; [|by apply elem_of_list_singleton|done].
-    by specialize (NOT_DIAG z).
-  - apply IH; [done|].
+    by apply irreflexivity in Sorted.
+  - apply IH.
     by apply StronglySorted_app_inv_r, StronglySorted_Sorted in Sorted.
 Qed.
 
@@ -106,10 +107,10 @@ Proof.
     by apply LT.
 Qed.
 
-Lemma take_drop_sorted `{!Transitive R} i j L :
-  (∀ n, ¬ R n n) → i ≤ j → Sorted R L → Sorted R (take i L ++ drop j L).
+Lemma take_drop_sorted `{!Transitive R, !Irreflexive R} i j L :
+  i ≤ j → Sorted R L → Sorted R (take i L ++ drop j L).
 Proof.
-  intros NOT_DIAG LT LSort.
+  intros LT LSort.
   destruct (decide (i = j)) as [->|NE]; [by rewrite take_drop|].
   destruct (decide (i ≤ length L)) as [LE|GT]; last first.
   { rewrite firstn_all2; [|lia].
@@ -123,13 +124,13 @@ Proof.
   apply (sorted_strict_inc (length (take i L) - 1) j L z1 z2); auto.
   - destruct i.
     { rewrite take_0 in Hz1. simpl in *. inversion Hz1. }
-    rewrite lookup_take in Hz1; [done|]. rewrite take_length_le; lia.
+    rewrite lookup_take in Hz1; [done|]. rewrite length_take_le; lia.
   - by rewrite lookup_drop Nat.add_0_r in Hz2.
-  - rewrite take_length_le; lia.
+  - rewrite length_take_le; lia.
 Qed.
 
-Lemma delete_sorted `{!Transitive R} i L :
-  (∀ n, ¬ R n n) → Sorted R L → Sorted R (delete i L).
+Lemma delete_sorted `{!Transitive R, !Irreflexive R} i L :
+  Sorted R L → Sorted R (delete i L).
 Proof. intros. rewrite delete_take_drop. apply (take_drop_sorted i (S i)); auto. Qed.
 
 Definition insert_middle i k L :=
@@ -165,11 +166,11 @@ Implicit Types
 
   Lemma sorted_inf_Z_nodup L :
     Sorted_inf_Z L → NoDup L.
-  Proof. apply (sorted_nodup inf_Z.lt),inf_Z.lt_not_diag. Qed.
+  Proof. apply (sorted_nodup inf_Z.lt). Qed.
 
   Lemma sorted_inf_Z_strict_inc i j L n m :
     Sorted_inf_Z L → L !! i = Some n → L !! j = Some m → (n < m)%inf_Z ↔ i < j .
-  Proof. apply (sorted_strict_inc inf_Z.lt _ _ L),inf_Z.lt_not_diag. Qed.
+  Proof. apply (sorted_strict_inc inf_Z.lt _ _ L). Qed.
 
   Lemma sorted_inf_Z_none_in_middle idx n m k L:
     L !! idx = Some n →
@@ -178,15 +179,15 @@ Implicit Types
     (k < m)%inf_Z →
     Sorted_inf_Z L →
     k ∉ L.
-  Proof. apply (sorted_none_in_middle inf_Z.lt), inf_Z.lt_not_diag. Qed.
+  Proof. apply (sorted_none_in_middle inf_Z.lt). Qed.
 
   Lemma delete_inf_Z_sorted i L :
     Sorted_inf_Z L → Sorted_inf_Z (delete i L).
-  Proof. apply (delete_sorted inf_Z.lt),inf_Z.lt_not_diag. Qed.
+  Proof. apply (delete_sorted inf_Z.lt). Qed.
 
   Lemma take_drop_inf_Z_sorted i j L :
     i ≤ j → Sorted_inf_Z L → Sorted_inf_Z (take i L ++ drop j L).
-  Proof. apply (take_drop_sorted inf_Z.lt),inf_Z.lt_not_diag. Qed.
+  Proof. apply (take_drop_sorted inf_Z.lt). Qed.
 
   Lemma insert_middle_inf_Z_sorted i k L :
     Sorted_inf_Z L →
@@ -225,8 +226,8 @@ Implicit Types
 
 Definition prophecy_to_bool (v : list (val * val)) : bool :=
   match v with
-  | (_, LitV (LitBool b)) :: _ => b
-  | _                          => false
+  | (LitV (LitLoc {| Loc.tloc_oloc := _; Loc.tloc_tag := n|}), _) :: _ => bool_decide (n ≠ 0)
+  | _                                                          => false
   end.
 
 Definition insert_middle_nbl i k b p L :=
@@ -365,9 +366,9 @@ Proof.
     + rewrite (take_S_r _ _ (p_k,false,p)); [|done].
       rewrite (take_S_r _ idx' p_k); last first.
       { subst idx'. simplify_list_eq. rewrite lookup_app_r; [|lia]. by rewrite Nat.sub_diag. }
-      rewrite take_app3_alt; last by done.
+      rewrite take_app3_length'; last by done.
       by rewrite get_abs_state_app.
-    + rewrite drop_app_alt; last by rewrite app_length /= Nat.add_1_r.
+    + rewrite drop_app_length'; last by rewrite length_app /= Nat.add_1_r.
       repeat f_equal. rewrite (drop_S L (c_k,b,c)); [done|].
       by rewrite -Nat.add_1_r.
 Qed.
@@ -387,7 +388,7 @@ Proof.
   exists idx'. split.
   - rewrite -(take_drop (S idx) L).
     rewrite get_abs_state_app lookup_app_l (take_S_r _ _(FinInt k, false, c)); try done; last first.
-    { rewrite get_abs_state_app app_length /=. lia. }
+    { rewrite get_abs_state_app length_app /=. lia. }
     subst idx'.
     by rewrite get_abs_state_app snoc_lookup.
   - rewrite -(take_drop (S idx) L). subst L'.
@@ -397,7 +398,7 @@ Proof.
     rewrite (take_S_r L idx (FinInt k, false, c)); [|done].
     rewrite !get_abs_state_app. simplify_list_eq.
     repeat f_equal.
-    rewrite cons_middle assoc drop_app_alt; [|by rewrite app_length /=; lia].
+    rewrite cons_middle assoc drop_app_length'; [|by rewrite length_app /=; lia].
     by rewrite get_abs_state_cons.
 Qed.
 

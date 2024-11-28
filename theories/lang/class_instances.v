@@ -66,7 +66,7 @@ Section atomic.
   Proof.
     rename e into e1. intros H σ1 e2 κ σ2 efs [Ks e1' e2' Hfill -> step].
     simpl in *. induction Ks as [|K Ks _] using rev_ind; simpl in Hfill.
-    - subst. inversion_clear step. by eapply (H σ1 (Val _) _ σ2 efs), head_prim_step.
+    - subst. inversion_clear step. by eapply (H σ1 (Val _) _ σ2 efs), base_prim_step.
     - rewrite fill_app. rewrite fill_app in Hfill.
       assert (∀ v, Val v = fill Ks e1' → False) as fill_absurd.
       { intros v Hv. assert (to_val (fill Ks e1') = Some v) as Htv by by rewrite -Hv.
@@ -105,9 +105,9 @@ Global Hint Extern 0 (AsRecV (RecV _ _ _) _ _ _) =>
 
 Section pure_exec.
   Local Ltac solve_exec_safe := intros; subst; do 3 eexists; econstructor; eauto.
-  Local Ltac solve_exec_puredet := simpl; intros; inv_head_step; try (done||lia).
+  Local Ltac solve_exec_puredet := simpl; intros; inv_base_step; try (done||lia).
   Local Ltac solve_pure_exec :=
-    (try subst); intros ?; apply nsteps_once, pure_head_step_pure_step;
+    (try subst); intros ?; apply nsteps_once, pure_base_step_pure_step;
       constructor; [solve_exec_safe | solve_exec_puredet].
 
   Global Instance pure_recc f x (erec : expr) :
@@ -132,13 +132,13 @@ Section pure_exec.
   Proof. solve_pure_exec. Qed.
 
   Global Instance pure_binop op v1 v2 v' :
-    PureExec (bin_op_eval op v1 v2 = Some v') 1 (BinOp op (Val v1) (Val v2)) (Val v') | 10.
+    PureExec (bin_op_eval op v1 v2 = Some v') 1 (BinOp op (Val v1) (Val v2)) (Val v') | 15.
   Proof. solve_pure_exec. Qed.
   (* Lower-cost instance for [EqOp]. *)
   Global Instance pure_eqop v1 v2 :
     PureExec (vals_compare_safe v1 v2) 1
       (BinOp EqOp (Val v1) (Val v2))
-      (Val $ LitV $ LitBool $ bool_decide (v1 = v2)) | 1.
+      (Val $ LitV $ LitBool $ bool_decide (v1 = v2)) | 5.
   Proof.
     intros Hcompare.
     cut (bin_op_eval EqOp v1 v2 = Some $ LitV $ LitBool $ bool_decide (v1 = v2)).
@@ -168,23 +168,83 @@ Section pure_exec.
   Proof. solve_pure_exec. Qed.
 
   Global Instance pure_eq_oloc l1 l2:
-    PureExec True 1 (BinOp EqOp (LitV (oloc_to_lit l1)) (LitV (oloc_to_lit l2))) (LitV (bool_decide (l1 = l2))).
+    PureExec True 1 (BinOp EqOp (LitV (oloc_to_lit l1)) (LitV (oloc_to_lit l2))) (LitV (bool_decide (l1 = l2))) | 4.
   Proof.
     destruct l1,l2; simpl; solve_pure_exec.
     all: split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
     repeat case_bool_decide; naive_solver.
+  Qed.
+
+  Global Instance pure_eq_loc l1 l2:
+    PureExec True 1 (BinOp EqOp (LitV (oloc_to_lit (Some l1))) (LitV (oloc_to_lit (Some l2)))) (LitV (bool_decide (l1 = l2))) | 3.
+  Proof.
+    solve_pure_exec.
+    split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
+    repeat case_bool_decide; naive_solver.
+  Qed.
+
+  Global Instance pure_eq_oloc_true l :
+    PureExec True 1 (BinOp EqOp (LitV (oloc_to_lit l)) (LitV (oloc_to_lit l))) (LitV true) | 2.
+  Proof.
+    destruct l; simpl; solve_pure_exec.
+    all: split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
+    repeat case_bool_decide; naive_solver.
+  Qed.
+
+  Global Instance pure_eq_loc_none_false l :
+    PureExec True 1 (BinOp EqOp (LitV (oloc_to_lit (Some l))) (LitV (oloc_to_lit None))) (LitV false) | 2.
+  Proof.
+    solve_pure_exec.
+    split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
+  Qed.
+
+  Global Instance pure_eq_none_loc_false l :
+    PureExec True 1 (BinOp EqOp (LitV (oloc_to_lit None)) (LitV (oloc_to_lit (Some l)))) (LitV false) | 2.
+  Proof.
+    solve_pure_exec.
+    split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
   Qed.
 
   Global Instance pure_eq_oblk l1 l2:
-    PureExec True 1 (BinOp EqOp (LitV (oblk_to_lit l1)) (LitV (oblk_to_lit l2))) (LitV (bool_decide (l1 = l2))).
+    PureExec True 1 (BinOp EqOp (LitV (oblk_to_lit l1)) (LitV (oblk_to_lit l2))) (LitV (bool_decide (l1 = l2))) | 4.
   Proof.
     destruct l1,l2; simpl; solve_pure_exec.
     all: split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
     repeat case_bool_decide; naive_solver.
   Qed.
 
+  Global Instance pure_eq_blk l1 l2:
+    PureExec True 1 (BinOp EqOp (LitV (oblk_to_lit (Some l1))) (LitV (oblk_to_lit (Some l2)))) (LitV (bool_decide (l1 = l2))) | 3.
+  Proof.
+    solve_pure_exec.
+    split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
+    repeat case_bool_decide; naive_solver.
+  Qed.
+
+  Global Instance pure_eq_oblk_true l :
+    PureExec True 1 (BinOp EqOp (LitV (oblk_to_lit l)) (LitV (oblk_to_lit l))) (LitV true) | 2.
+  Proof.
+    destruct l; simpl; solve_pure_exec.
+    all: split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
+    repeat case_bool_decide; naive_solver.
+  Qed.
+
+  Global Instance pure_eq_blk_none_false l :
+    PureExec True 1 (BinOp EqOp (LitV (oblk_to_lit (Some l))) (LitV (oblk_to_lit None))) (LitV false) | 2.
+  Proof.
+    solve_pure_exec.
+    split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
+  Qed.
+
+  Global Instance pure_eq_none_blk_false l :
+    PureExec True 1 (BinOp EqOp (LitV (oblk_to_lit None)) (LitV (oblk_to_lit (Some l)))) (LitV false) | 2.
+  Proof.
+    solve_pure_exec.
+    split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
+  Qed.
+
   Global Instance pure_eq_onat n1 n2:
-    PureExec True 1 (BinOp EqOp (LitV (onat_to_lit n1)) (LitV (onat_to_lit n2))) (LitV (bool_decide (n1 = n2))).
+    PureExec True 1 (BinOp EqOp (LitV (onat_to_lit n1)) (LitV (onat_to_lit n2))) (LitV (bool_decide (n1 = n2))) | 4.
   Proof.
     destruct n1,n2; simpl; solve_pure_exec.
     all: split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
@@ -192,22 +252,58 @@ Section pure_exec.
     all: select (#_ = #_) (fun H => inversion H; lia).
   Qed.
 
+  Global Instance pure_eq_nat n1 n2:
+    PureExec True 1 (BinOp EqOp (LitV (onat_to_lit (Some n1))) (LitV (onat_to_lit (Some n2)))) (LitV (bool_decide (n1 = n2))) | 3.
+  Proof.
+    solve_pure_exec.
+    split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
+    repeat case_bool_decide; try naive_solver.
+  Qed.
+
+  Global Instance pure_eq_onat_true n :
+    PureExec True 1 (BinOp EqOp (LitV (onat_to_lit n)) (LitV (onat_to_lit n))) (LitV true) | 2.
+  Proof.
+    destruct n; simpl; solve_pure_exec.
+    all: split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
+    all: repeat case_bool_decide; try naive_solver.
+  Qed.
+
+  Global Instance pure_eq_nat_none_false n :
+    PureExec True 1 (BinOp EqOp (LitV (onat_to_lit (Some n))) (LitV (onat_to_lit None))) (LitV false) | 2.
+  Proof.
+    solve_pure_exec.
+    split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
+    repeat case_bool_decide; try naive_solver.
+    select (#_ = #_) (fun H => inversion H).
+    lia.
+  Qed.
+
+  Global Instance pure_eq_none_nat_false n :
+    PureExec True 1 (BinOp EqOp (LitV (onat_to_lit None)) (LitV (onat_to_lit (Some n)))) (LitV false) | 2.
+  Proof.
+    solve_pure_exec.
+    split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
+    repeat case_bool_decide; try naive_solver.
+    select (#_ = #_) (fun H => inversion H).
+    lia.
+  Qed.
+
   Global Instance pure_lt_inf_Z (z1 z2 : inf_Z) :
-    PureExec True 1 (BinOp LtOp (LitV z1) (LitV z2)) (LitV (bool_decide (z1 < z2)%inf_Z)).
+    PureExec True 1 (BinOp LtOp (LitV z1) (LitV z2)) (LitV (bool_decide (z1 < z2)%inf_Z)) | 3.
   Proof. solve_pure_exec.
     split_and!; [done..| |done]. unfold bin_op_eval in *; simpl in *.
     by select (Some _ = Some _) (fun H => injection H as [= <-]).
   Qed.
 
   Global Instance pure_le_inf_Z (z1 z2 : inf_Z) :
-    PureExec True 1 (BinOp LeOp (LitV z1) (LitV z2)) (LitV (bool_decide (z1 ≤ z2)%inf_Z)).
+    PureExec True 1 (BinOp LeOp (LitV z1) (LitV z2)) (LitV (bool_decide (z1 ≤ z2)%inf_Z)) | 3.
   Proof. solve_pure_exec.
     split_and!; [done..| |done]. unfold bin_op_eval in *; simpl in *.
     by select (Some _ = Some _) (fun H => injection H as [= <-]).
   Qed.
 
   Global Instance pure_eq_inf_Z (z1 z2 : inf_Z) :
-    PureExec True 1 (BinOp EqOp (LitV z1) (LitV z2)) (LitV (bool_decide (z1 = z2))).
+    PureExec True 1 (BinOp EqOp (LitV z1) (LitV z2)) (LitV (bool_decide (z1 = z2))) | 3.
   Proof. solve_pure_exec.
     split_and!; [done..| |done]. unfold bin_op_eval in *; simpl in *.
     select (Some _ = Some _) (fun H => injection H as [= <-]).
@@ -216,22 +312,38 @@ Section pure_exec.
     - exfalso. select (#_ ≠ #_) ltac:(fun H => apply H). naive_solver.
   Qed.
 
+  Global Instance pure_eq_inf_Z_eq (z : inf_Z) :
+    PureExec True 1 (BinOp EqOp (LitV z) (LitV z)) (LitV true) | 2.
+  Proof. solve_pure_exec.
+    split_and!; [done..| |done]. unfold bin_op_eval in *; simpl in *.
+    select (Some _ = Some _) (fun H => injection H as [= <-]).
+    repeat case_bool_decide; auto.
+    exfalso. select (#_ ≠ #_) ltac:(fun H => apply H). naive_solver.
+  Qed.
+
+  Global Instance pure_eq_inf_Z_Z (z1 z2 : Z) :
+    PureExec True 0 (Val (LitV (bool_decide (FinInt z1 = FinInt z2)))) (LitV (bool_decide (z1 = z2)%Z)) | 3.
+  Proof.
+    intros ?. assert ((bool_decide (FinInt z1 = FinInt z2)) = (bool_decide (z1 = z2))) as ->; [|constructor].
+    repeat case_bool_decide; naive_solver.
+  Qed.
+
   Global Instance pure_lt_inf_Z_Z (z1 z2 : Z) :
-    PureExec True 0 (Val (LitV (bool_decide (z1 < z2)%inf_Z))) (LitV (bool_decide (z1 < z2)%Z)).
+    PureExec True 0 (Val (LitV (bool_decide (z1 < z2)%inf_Z))) (LitV (bool_decide (z1 < z2)%Z)) | 3.
   Proof.
     intros ?. assert ((bool_decide (z1 < z2)%inf_Z) = (bool_decide (z1 < z2)%Z)) as ->; [|constructor].
     case_bool_decide as EQ_inf_Z; case_bool_decide as EQ_Z; naive_solver.
   Qed.
 
   Global Instance pure_le_inf_Z_Z (z1 z2 : Z) :
-    PureExec True 0 (Val (LitV (bool_decide (z1 ≤ z2)%inf_Z))) (LitV (bool_decide (z1 ≤ z2)%Z)).
+    PureExec True 0 (Val (LitV (bool_decide (z1 ≤ z2)%inf_Z))) (LitV (bool_decide (z1 ≤ z2)%Z)) | 3.
   Proof.
     intros ?. assert ((bool_decide (z1 ≤ z2)%inf_Z) = (bool_decide (z1 ≤ z2)%Z)) as ->; [|constructor].
     case_bool_decide as EQ_inf_Z; case_bool_decide as EQ_Z; naive_solver.
   Qed.
 
   Global Instance pure_tag on t1 t2:
-    PureExec True 1 (BinOp TagOp (LitV (on &ₜ t1)) (LitV (FinInt t2))) (LitV (on &ₜ t2)).
+    PureExec True 1 (BinOp TagOp (LitV (on &ₜ t1)) (LitV (FinInt t2))) (LitV (on &ₜ t2)) | 3.
   Proof. destruct on; solve_pure_exec.
     all: split_and!; try done; unfold bin_op_eval in *; simpl in *; try naive_solver.
   Qed.

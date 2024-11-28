@@ -28,13 +28,13 @@ Proof.
   iDestruct (array_app with "Hl") as "[Hl1 Hl]".
   iDestruct (array_cons with "Hl") as "[Hl2 Hl3]".
   assert (off < length vs) as H by (apply lookup_lt_is_Some; by eexists).
-  rewrite take_length min_l; last by lia. iFrame "Hl2".
+  rewrite length_take min_l; last by lia. iFrame "Hl2".
   iIntros (w) "Hl2".
   clear Hlookup. assert (<[off:=w]> vs !! off = Some w) as Hlookup.
   { apply list_lookup_insert. lia. }
   rewrite -[in (l ↦∗{_} <[off:=w]> vs)%I](take_drop_middle (<[off:=w]> vs) off w Hlookup).
   iApply array_app. rewrite take_insert; last by lia. iFrame.
-  iApply array_cons. rewrite take_length min_l; last by lia. iFrame.
+  iApply array_cons. rewrite length_take min_l; last by lia. iFrame.
   rewrite drop_insert_gt; last by lia. done.
 Qed.
 
@@ -292,6 +292,28 @@ Proof.
   iIntros (Φ) "Hp HΦ". iApply (wp_resolve with "Hp"); first done.
   iApply lifting.wp_pure_step_later; first done.
   iIntros "!> _". iApply wp_value. iIntros (vs') "HEq Hp". iApply "HΦ". iFrame.
+Qed.
+
+Lemma wp_resolve_load s E l (p : proph_id) (pvs : list (val * val)) dq v v':
+  {{{ proph p pvs ∗ ▷ l ↦{dq} v }}}
+    Resolve !#l #p v' @ s; E
+  {{{ pvs', RET v; ⌜pvs = (v, v')::pvs'⌝ ∗ proph p pvs' ∗ l ↦{dq} v }}}.
+Proof.
+  iIntros (Φ) "[Hp Hl] HΦ". iApply (wp_resolve with "Hp"); first done.
+  iApply (wp_load with "Hl"). iIntros "!> Hl".
+  iIntros (pvs' ->) "Hp". iApply "HΦ". eauto with iFrame.
+Qed.
+
+Lemma wp_resolve_load_offset s E l (p : proph_id) (pvs : list (val * val)) dq off vs v v':
+  vs !! off = Some v →
+  {{{ proph p pvs ∗ ▷ l ↦∗{dq} vs }}}
+    Resolve !#(l +ₗ off) #p v' @ s; E
+  {{{ pvs', RET v; ⌜pvs = (v, v')::pvs'⌝ ∗ proph p pvs' ∗ l ↦∗{dq} vs }}}.
+Proof.
+  iIntros (Hlookup Φ) "[Hp Hl] HΦ".
+  iApply (wp_resolve with "Hp"); first done.
+  iApply (wp_load_offset with "Hl"); [done|]. iIntros "!> Hl".
+  iIntros (pvs' ->) "Hp". iApply "HΦ". eauto with iFrame.
 Qed.
 
 Lemma wp_resolve_cmpxchg_suc s E l (p : proph_id) (pvs : list (val * val)) v1 v2 v :

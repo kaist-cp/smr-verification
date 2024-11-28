@@ -1,5 +1,5 @@
-From iris.algebra Require Import excl agree gset auth.
-From iris.base_logic.lib Require Import invariants ghost_var ghost_map.
+From iris.algebra Require Import agree auth.
+From iris.base_logic.lib Require Import invariants ghost_var ghost_map token.
 From smr.program_logic Require Import atomic.
 From smr.lang Require Import proofmode notation.
 From iris.prelude Require Import options.
@@ -12,15 +12,15 @@ Local Instance offer_state_eq_dec : EqDecision offer_state.
 Proof. solve_decision. Qed.
 
 Class elimstackG Σ := ElimstackG {
-  elimstack_ghost_varG :> ghost_varG Σ (list val);
-  elimstack_inG :> inG Σ (agreeR (prodO valO (optionO blkO)));
-  elimstack_tokG :> inG Σ (exclR unitO);
-  elimstack_ghost_var2G :> ghost_varG Σ offer_state;
-  elimstack_offer_gmapG :> ghost_mapG Σ blk gname;
-  elimstack_var_tokG :> inG Σ (agreeR valO);
+  #[local] elimstack_stackG :: ghost_varG Σ (list val);
+  #[local] elimstack_nodeG :: inG Σ (agreeR (prodO valO (optionO blkO)));
+  #[local] elimstack_tokG :: tokenG Σ;
+  #[local] elimstack_offerG :: ghost_varG Σ offer_state;
+  #[local] elimstack_offer_mapG :: ghost_mapG Σ blk gname;
+  #[local] elimstack_offer_valG :: inG Σ (agreeR valO);
 }.
 
-Definition elimstackΣ : gFunctors := #[ghost_varΣ (list val); GFunctor (agreeR (prodO valO (optionO blkO))); GFunctor (exclR unitO); ghost_varΣ offer_state; ghost_mapΣ blk gname; GFunctor (agreeR valO)].
+Definition elimstackΣ : gFunctors := #[ghost_varΣ (list val); GFunctor (agreeR (prodO valO (optionO blkO))); tokenΣ; ghost_varΣ offer_state; ghost_mapΣ blk gname; GFunctor (agreeR valO)].
 
 Global Instance subG_elimstackΣ {Σ} :
   subG elimstackΣ Σ → elimstackG Σ.
@@ -81,7 +81,7 @@ Definition offer_inv (offer_loc : blk) (v : val) (γz γn γo : gname) (P Q : iP
     match st with
     | OfferPending => P
     | OfferAccepted => Q
-    | _ => own γo (Excl ())
+    | _ => token γo
     end.
 
 (* Ownership of the stack *)
@@ -92,7 +92,7 @@ Global Instance EStack_Timeless γ xs: Timeless (EStack γ xs).
 Proof. apply _. Qed.
 
 Definition stack_push_au γ v Q : iProp :=
-  AU << ∃∃ l, EStack γ l>> @ ⊤∖(↑elimN ∪ ↑ptrsN hazptrN),↑mgmtN hazptrN << EStack γ (v :: l), COMM Q >>.
+  AU <{ ∃∃ l, EStack γ l }> @ ⊤∖(↑elimN ∪ ↑ptrsN hazptrN),↑mgmtN hazptrN <{ EStack γ (v :: l), COMM Q }>.
 
 Definition IsOffer (γ : gname) (offer_rep : option blk) (offers : gmap blk gname) : iProp :=
   match offer_rep with
@@ -132,14 +132,14 @@ Proof.
   iIntros (γz d Φ) "!> #IHD HΦ".
   wp_lam. wp_alloc st as "st↦" "†st". wp_pures.
   repeat (wp_apply (wp_store_offset with "st↦") as "st↦"; [by simplify_list_eq|]; wp_pures).
-  rewrite !array_cons !loc_add_assoc.
+  rewrite !array_cons !Loc.add_assoc.
   iDestruct "st↦" as "(st.h↦ & st.of↦ & st.d↦ & _)".
   iMod (ghost_var_alloc []) as (γs) "[Hγs Hγs']".
   iMod (ghost_map_alloc_empty) as (γof) "Hγof".
   remember (encode (γz, γs, γof)) as γ eqn:Hγ.
-  iMod (mapsto_persist with "st.d↦") as "#st.d↦".
+  iMod (pointsto_persist with "st.d↦") as "#st.d↦".
   iMod (inv_alloc stackN _ (EStackInternalInv st γ γz γs γof) with "[st.h↦ Hγs st.of↦ Hγof]") as "#Hinv_stack".
-  { iNext. iExists None, []. rewrite loc_add_0. iFrame. iExists None, ∅. by iFrame. }
+  { iNext. iExists None, []. rewrite Loc.add_0. iFrame. iExists None. iFrame. auto. }
   iApply ("HΦ" $! γ). iSplitR "Hγs'"; by exfr.
 Qed.
 
@@ -169,14 +169,14 @@ Proof using All.
     iMod ("Commit" with "[Hγs']") as "HΦ"; first by exfr.
     iModIntro. iSplitL "st.h↦ Hplist Hγs Hγn G_new Hoffer".
     { iExists (Some _), (_ :: _). simpl. exfr. }
-    wp_pures. iApply "HΦ". done.
+    wp_pures. iApply "HΦ".
   - (* CAS failed --> make an offer *)
     wp_cmpxchg_fail; [destruct h1, h2; simpl; naive_solver..|].
     iModIntro. iSplitL "Hplist st.h↦ Hγs Hoffer"; first by exfr.
     wp_pures.
     wp_apply (wp_store_offset with "n↦") as "n↦"; [by simplify_list_eq|]; wp_pures.
     (* make an offer *)
-    iMod (own_alloc (Excl ())) as (γo) "Htok"; [done|].
+    iMod token_alloc as (γo) "Htok".
     iMod (ghost_var_alloc OfferPending) as (γn_v) "[Hγn_v Hγn_v']".
     iMod (own_alloc (to_agree x)) as (γn_o) "#Hγn_o"; [done|].
     remember (encode (γn_v, γn_o)) as γn eqn:Hγn.
@@ -193,7 +193,7 @@ Proof using All.
       iDestruct (hazptr.(managed_exclusive) with "G_new G_new'") as %[]. }
     iMod (ghost_map_insert _ γn with "γof") as "[γof key]"; [apply Hn|].
     iMod ("Hclose" with "[Hplist st.h↦ Hγs st.of↦ γof Hoffers G_new]") as "_".
-    { repeat iExists _. iFrame "∗#%". iExists (Some n), (<[ n := γn ]> offers). iFrame "∗#%".
+    { iFrame "γof". iFrame "∗#%". iExists (Some n). iFrame "∗#%".
       iSplitR; last (rewrite big_sepM_insert); try done; exfr. by simplify_map_eq. }
     (* Retract the offer *)
     iModIntro. wp_pures. wp_bind (_ <- _)%E. clear h2 xs2.
@@ -213,6 +213,7 @@ Proof using All.
     iDestruct "Hod" as (v stat) "[-> (%γn_v' & %γn_o' & %Hγn' & Hγn_v & #Hγn_o')]". encode_agree Hγn.
     iCombine "Hγn_o Hγn_o'" gives %<-%to_agree_op_inv_L. iClear "Hγn_o'".
     iInv "Hinv_noffer" as (stat') "[>(%γn_v' & %γn_o' & %Hγn' & Hγn_v' & _) Hstat']" "Hclose". encode_agree Hγn.
+    iMod (lc_fupd_elim_later with "Hlc Hstat'") as "Hstat'".
     destruct stat; simpl.
     + (* OfferPending *)
       wp_apply (wp_cmpxchg_suc_offset with "n↦") as "n↦"; [by simplify_list_eq|done|by constructor|].
@@ -222,14 +223,12 @@ Proof using All.
       { iExists OfferRevoked. exfr. }
       do 2 iModIntro. iSplitL "n↦ Hγn_v".
       { iExists _. iFrame "n↦". simpl. iSplitR; first done. iExists _, OfferRevoked. iSplit; first done. exfr. }
-      iMod (lc_fupd_elim_later with "Hlc Hstat'") as "AU".
       wp_pures. wp_load. wp_let.
       wp_apply (hazptr.(hazard_domain_retire_spec) with "IHD G_new") as "_"; [solve_ndisj|..].
-      wp_seq. wp_apply ("IH" with "AU").
+      wp_seq. wp_apply ("IH" with "Hstat'").
     + (* OfferRevoked --> impossible case *)
       iDestruct (ghost_var_agree with "Hγn_v Hγn_v'") as %<-.
-      iDestruct "Hstat'" as ">Htok'".
-      iCombine "Htok Htok'" gives %[].
+      iCombine "Htok Hstat'" gives %[].
     + (* OfferAccepted *)
       wp_apply (wp_cmpxchg_fail_offset with "n↦") as "n↦"; [by simplify_list_eq|done|by constructor|].
       iDestruct (ghost_var_agree with "Hγn_v Hγn_v'") as %<-.
@@ -242,8 +241,7 @@ Proof using All.
       wp_pures. by iApply "Hstat'".
     + (* OfferAcked --> impossible case *)
       iDestruct (ghost_var_agree with "Hγn_v Hγn_v'") as %<-.
-      iDestruct "Hstat'" as ">Htok'".
-      iCombine "Htok Htok'" gives %[].
+      iCombine "Htok Hstat'" gives %[].
 Qed.
 
 Lemma estack_pop_spec :
@@ -266,7 +264,7 @@ Proof using All.
   { (* empty stack case *)
     iAaccIntro with "[st.h↦]".
     { instantiate (1 := [tele_arg None; inhabitant; 0; (λ p : blk, node p)]). simpl. iFrame. }
-    { simpl. iIntros "[st.h↦ _] !>". iFrame. iExists None, []. iFrame. }
+    { simpl. iIntros "[st.h↦ _] !>". iFrame. }
     simpl. iIntros "[st.h↦ S]".
     iMod "AU" as (xs) "[EStack [_ Commit]]".
     iDestruct "EStack" as (γz' γs' γof') "[%Hγ' Hγs']". encode_agree Hγ.
@@ -274,17 +272,17 @@ Proof using All.
     iMod ("Commit" with "[Hγs']") as "HΦ"; first by exfr.
     iModIntro. iSplitL "st.h↦ Hγs Hoffer".
     { iExists None, []. exfr. }
-    iIntros "_". wp_pures.
+    wp_pures.
     wp_apply (hazptr.(shield_drop_spec) with "IHD S") as "_"; [solve_ndisj|..].
-    wp_seq. iApply "HΦ". done. }
+    wp_seq. iApply "HΦ". }
   (* nonempty stack case *)
   iDestruct "Hplist" as (γ_h1 n1) "(G_h1 & #Info_h1 & Hplist)".
   iAaccIntro with "[st.h↦ G_h1]".
   { instantiate (1 := [tele_arg (Some _); _; _; _]). simpl. iFrame. }
-  { iIntros "[st.h↦ G_h1] !>". iFrame. iExists (Some h1). exfr. }
+  { iIntros "[st.h↦ G_h1] !>". exfr. }
   simpl. iIntros "(st.h↦ & G_h1 & S) !>". iSplitR "S AU".
-  { iExists (Some h1), (x1 :: xs1). iFrame. iExists γ_h1, n1. iFrame "∗#%". }
-  iIntros "_". wp_pures.
+  { iExists (Some h1), (x1 :: xs1). iFrame "∗#%". }
+  wp_pures.
   wp_apply (shield_read with "S") as (??) "(S & #Info_h1' & %EQ)"; [solve_ndisj|lia|].
 
   iDestruct "Info_h1'" as (x1' n1') "[-> Info_h1']". injection EQ as [= <-].
@@ -316,7 +314,7 @@ Proof using All.
 
     wp_pures.
     wp_apply (hazptr.(shield_drop_spec) with "IHD S") as "_"; [solve_ndisj|].
-    wp_pures. iApply "HΦ". done.
+    wp_pures. iApply "HΦ".
   - (* CAS failed --> take an offer *)
     wp_cmpxchg_fail.
     iSplitL "Hγs st.h↦ Hplist Hoffer"; first by exfr.
@@ -327,12 +325,11 @@ Proof using All.
     { (* no offer *)
       iAaccIntro with "[st.of↦]".
       { instantiate (1 := [tele_arg None; inhabitant; 0; (λ p : blk, node p)]). simpl. iFrame. }
-      { simpl. iIntros "[st.of↦ _] !>". iFrame.
-        repeat iExists _. iFrame "∗#%". iExists None. exfr. }
+      { simpl. iIntros "[st.of↦ _] !>". iFrame. }
       simpl. iIntros "[st.of↦ S] !>".
       iSplitL "st.of↦ γof Hoffers Hplist st.h↦ Hγs".
-      { repeat iExists _. iFrame "∗#%". iExists None. exfr. }
-      iIntros "_". wp_pures. wp_apply ("IH" with "AU S"). }
+      { repeat iExists _. iFrame "∗#%". }
+      wp_pures. wp_apply ("IH" with "AU S"). }
     (* offer exists *)
     simpl. iDestruct "Hio" as (Q v ?????) "(>%Hγ' & #Hinv_noffer & >%res)". encode_agree Hγ.
     rewrite big_sepM_lookup_acc; [|apply res].
@@ -340,13 +337,11 @@ Proof using All.
     iAaccIntro with "[st.of↦ G_γn]".
     { instantiate (1 := [tele_arg (Some _); _; _; _]). iFrame. }
     { simpl. iIntros "[st.of↦ G_γn] !>". iFrame. iNext.
-      repeat iExists _. iFrame "∗#%". iExists (Some _). exfr. iSplitR; first by exfr.
-      by iApply "Hoffers". }
+      repeat iExists _. iFrame "∗#%". exfr. by iApply "Hoffers". }
     simpl. iIntros "[st.of↦ [G_γn S]] !>".
     iSplitR "AU S".
-    { repeat iExists _. iFrame "∗#%". iExists (Some _). exfr.
-      iSplitR; first by exfr. by iApply "Hoffers". }
-    iIntros "_". wp_pure credit:"Hlc". wp_pures. wp_bind (CmpXchg _ _ _).
+    { repeat iExists _. iFrame "∗#%". exfr. by iApply "Hoffers". }
+    wp_pure credit:"Hlc". wp_pures. wp_bind (CmpXchg _ _ _).
     iInv "S" as (lv) "(_ & n↦ & >Hod & S)".
     iDestruct "Hod" as (x stat) "[-> (%γn_v & %γn_o & %Hγn & Hγn_v & #Hγn_o)]".
     destruct (decide (stat = OfferPending)) as [->|]; last first.
@@ -386,7 +381,7 @@ Proof using All.
     { iExists _. iFrame "n↦". iSplit; [done|]. iExists x, stat'. iSplit; [done|]. repeat iExists _. iFrame "∗#%". }
     wp_pures.
     wp_apply (hazptr.(shield_drop_spec) with "IHD S") as "_"; [solve_ndisj|].
-    wp_seq. iApply "HΦ". done.
+    wp_seq. iApply "HΦ".
 Qed.
 
 #[export] Typeclasses Opaque EStack IsEStack.

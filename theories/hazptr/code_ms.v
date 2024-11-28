@@ -54,33 +54,27 @@ Definition queue_push : val :=
 
 Definition queue_pop_loop : val :=
   rec: "loop" "queue" "head_shield" "next_shield" :=
-    let: "head'" := hazptr.(shield_protect) "head_shield" ("queue" +ₗ #head) in (* #1 *)
-    let: "next" := !("head'" +ₗ #next) in (* #2 *)
+    let: "head" := hazptr.(shield_protect) "head_shield" ("queue" +ₗ #head) in (* #1 *)
+    let: "next" := !("head" +ₗ #next) in (* #2 *)
     if: "next" = #NULL then
       NONE
     else
-      (* NOTE: Reachability check for the next node should be done on the head
-      pointer, because the head node can be unreachable. *)
       hazptr.(shield_set) "next_shield" "next";;
-      let: "head" := !("queue" +ₗ #head) in (* #3 *)
-      if: "head'" ≠ "head" then
-        "loop" "queue" "head_shield" "next_shield"
+      (* Update tail pointer to ensure that the node to be retired will be
+      unreachable after undating the head pointer. NOTE: This can be done
+      after successfully updating the head pointer, right before retiring. In
+      that case, the tail pointer may temporarily lag behind the head
+      pointer. *)
+      let: "tail" := !("queue" +ₗ #tail) in (* #4 *)
+      (if: "head" = "tail" then
+        CAS ("queue" +ₗ #tail) "tail" "next" else #());; (* #5 *)
+      (* Update head pointer to the next node. *)
+      if: CAS ("queue" +ₗ #head) "head" "next" then (* #6 *)
+        let: "data" := !("next" +ₗ #data) in
+        hazptr.(hazard_domain_retire) !("queue" +ₗ #domain) "head" #nodeSize;;
+        SOME "data"
       else
-        (* Update tail pointer to ensure that the node to be retired will be
-        unreachable after undating the head pointer. NOTE: This can be done
-        after successfully updating the head pointer, right before retiring. In
-        that case, the tail pointer may temporarily lag behind the head
-        pointer. *)
-        let: "tail" := !("queue" +ₗ #tail) in (* #4 *)
-        (if: "head" = "tail" then
-          CAS ("queue" +ₗ #tail) "tail" "next" else #());; (* #5 *)
-        (* Update head pointer to the next node. *)
-        if: CAS ("queue" +ₗ #head) "head" "next" then (* #6 *)
-          let: "data" := !("next" +ₗ #data) in
-          hazptr.(hazard_domain_retire) !("queue" +ₗ #domain) "head" #nodeSize;;
-          SOME "data"
-        else
-          "loop" "queue" "head_shield" "next_shield".
+        "loop" "queue" "head_shield" "next_shield".
 
 Definition queue_pop : val :=
   λ: "queue",

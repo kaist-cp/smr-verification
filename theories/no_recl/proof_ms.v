@@ -1,5 +1,4 @@
-From iris.algebra Require Import agree.
-From iris.base_logic Require Import lib.mono_nat lib.invariants lib.ghost_map.
+From iris.base_logic Require Import lib.mono_nat lib.invariants.
 From smr.program_logic Require Import atomic.
 From smr.lang Require Import proofmode notation.
 From iris.prelude Require Import options.
@@ -12,8 +11,8 @@ Set Printing Projections.
 Local Open Scope nat_scope.
 
 Class msG Σ := MSG {
-  ms_mono_listG :> mono_listG (loc * val) Σ;
-  ms_mono_natG :> mono_natG Σ;
+  #[local] ms_mono_listG :: mono_listG (loc * val) Σ;
+  #[local] ms_mono_natG :: mono_natG Σ;
 }.
 
 Definition msΣ : gFunctors := #[mono_listΣ (loc * val); mono_natΣ].
@@ -150,7 +149,7 @@ Proof.
   - iDestruct "St_p" as (? ->) "(p.n↦ & ●CL_T)". iLeft.
     iExists CL. iSplit; [done|]. iFrame "●CL_T p.n↦". iSplit.
     + iIntros. iFrame "∗#%". iLeft. iExists CL. iFrame. done.
-    + iIntros. iFrame "∗#%". iRight. iExists _,_. iFrame "#".
+    + iIntros. iFrame "∗#%".
   - iDestruct "St_p" as (n_p x_n_p) "#[p.n↦ Info_n_p]".
     do 2 (iRight; iExists _,_; iFrame "#").
 Qed.
@@ -161,12 +160,12 @@ Proof.
   iIntros (Φ _) "HΦ".
   wp_lam. wp_alloc s as "s↦" "†s". wp_pures.
   iEval (rewrite array_cons array_singleton) in "s↦". iDestruct "s↦" as "[s.x↦ s.n↦]".
-  iMod (mapsto_persist with "s.x↦") as "#s.x↦".
+  iMod (pointsto_persist with "s.x↦") as "#s.x↦".
   wp_store. wp_alloc qu as "qu↦" "†qu"; wp_pures.
   repeat (wp_apply (wp_store_offset with "qu↦") as "qu↦"; [by simplify_list_eq|]; wp_pures).
-  iEval (rewrite !array_cons !loc_add_assoc //) in "qu↦".
+  iEval (rewrite !array_cons !Loc.add_assoc //) in "qu↦".
   iDestruct "qu↦" as "(qu.h↦ & qu.t↦ & _)".
-  iMod (mono_list_own_alloc [(blk_to_loc s,#0)]) as (γcl) "[[●CL_T ●CL] #◯CL]".
+  iMod (mono_list_own_alloc [(Loc.blk_to_loc s,#0)]) as (γcl) "[[●CL_T ●CL] #◯CL]".
   iDestruct (mono_list_idx_own_get 0 with "◯CL") as "Info_s"; [done|].
   iAssert (node_status _ _ _) with "[●CL_T s.n↦]" as "Gt_s".
   { iLeft. iExists _. iFrame. done. }
@@ -176,9 +175,9 @@ Proof.
   iAssert (Queue γq []) with "[●CL_Q ●ih_Q]" as "Q".
   { repeat iExists _. iFrame "∗%". done. }
   iMod (inv_alloc queueN _ (QueueInternalInv qu _ _) with "[-HΦ Q]") as "#Inv".
-  { iNext. iExists _,_,_,_,0. iFrame "∗#". iFrame "∗#%". by iSplit. }
+  { iNext. iFrame. iExists 0. iFrame "∗#". by iSplit. }
   iAssert (IsQueue _ _) as "IQ".
-  { repeat iExists _. iFrame "#%". }
+  { iFrame "#%". }
   iApply ("HΦ" with "[$IQ $Q]").
 Qed.
 
@@ -245,7 +244,7 @@ Proof using All.
     iSpecialize ("Nodes" with "N_t1").
     iModIntro. iSplitL "●CL_I qu.h↦ ●ih_I qu.t↦ Nodes".
     { repeat iExists _. iFrame "∗#%". }
-    wp_pures. by iApply ("HΦ" with "[$Info_t1]"). }
+    wp_pures. by iApply ("HΦ" with "Info_t1"). }
 
   (* Not tail *)
   iDestruct "CASE" as (n_t1 x_n_t1) "(#t1.n↦ & #Info_n_t1 & N_t1)".
@@ -281,14 +280,14 @@ Proof using All.
   iInv "Inv" as (CL1 h1 ih1 t1 it1)
               ">(Nodes & ●CL_I & qu.h↦ & ●ih_I & qu.t↦ & %F1)".
   iDestruct (mono_list_auth_idx_lookup with "●CL_I Idx_t") as %Hit.
-  iDestruct (Nodes_access i_t with "[$Nodes]") as "[N_h1 Nodes]"; [apply Hit|].
+  iDestruct (Nodes_access i_t with "Nodes") as "[N_h1 Nodes]"; [apply Hit|].
 
   iDestruct (node_case with "N_h1") as "[CASE|CASE]"; last first.
   { (* not tail; CAS failure *)
     iDestruct "CASE" as (n_t x_n_t) "(#t.n↦ & #Info_n_t & N_t)". simpl.
     wp_cmpxchg_fail.
-    iModIntro. iSplitR "AU n↦". { repeat iExists _. iFrame "∗#%". iApply ("Nodes" with "N_t"). }
-    wp_pure. wp_if. iApply ("IH" with "AU n↦"). }
+    iModIntro. iSplitR "AU n↦". { iFrame "∗#%". iApply ("Nodes" with "N_t"). }
+    wp_pures. iApply ("IH" with "AU n↦"). }
 
   (* [t] is the actual tail. *)
   iDestruct "CASE" as (? Hi_t) "[t.n↦ [●CL_T N_t]]". simpl.
@@ -304,30 +303,30 @@ Proof using All.
   (* updates *)
   iCombine "●CL_T ●CL_I ●CL_Q" as "●CL".
 
-  iMod (mono_list_auth_own_update_app [(blk_to_loc n,x)] with "●CL") as "[[●CL_T ●CL] #◯CL1']".
-  set (CL1' := CL1 ++ [(blk_to_loc n, x)]) in *.
-  have Hit1' : CL1' !! (i_t + 1) = Some (blk_to_loc n, x).
+  iMod (mono_list_auth_own_update_app [(Loc.blk_to_loc n,x)] with "●CL") as "[[●CL_T ●CL] #◯CL1']".
+  set (CL1' := CL1 ++ [(Loc.blk_to_loc n, x)]) in *.
+  have Hit1' : CL1' !! (i_t + 1) = Some (Loc.blk_to_loc n, x).
   { subst CL1' i_t. destruct F1 as (_ & ?%lookup_fmap_lt_Some). (* [length CL > 0] *)
     rewrite lookup_app_r; [|lia].
     by replace (length CL1 - 1 + 1 - length CL1) with 0 by lia. }
   (* required for advancing the tail pointer *)
   iDestruct (mono_list_idx_own_get _ _ Hit1' with "◯CL1'") as "Info_n".
   iEval (rewrite array_cons array_singleton) in "n↦". iDestruct "n↦" as "[n.x↦ n.n↦]".
-  iMod (mapsto_persist with "n.x↦") as "#n.x↦".
+  iMod (pointsto_persist with "n.x↦") as "#n.x↦".
   (* register the enqueued node *)
   iAssert (node γcl n _ _) with "[●CL_T n.n↦]" as "N_n".
-  { unfold node. rewrite !loc_add_0. iFrame "∗#%". iLeft.
+  { unfold node. rewrite !Loc.add_0. iFrame "∗#%". iLeft.
     iExists _. iFrame "●CL_T n.n↦". iPureIntro.
-    rewrite app_length /=.
+    rewrite length_app /=.
     apply lookup_lt_Some in Hit. (* [length CL1 > 0] *) lia. }
   iDestruct "●CL" as "[●CL_I ●CL_Q]".
 
-  wp_cmpxchg_suc. iMod (mapsto_persist with "t.n↦") as "#t.n↦".
+  wp_cmpxchg_suc. iMod (pointsto_persist with "t.n↦") as "#t.n↦".
   (* commit *)
   iMod ("Commit" with "[●CL_Q ●ih_Q]") as "HΦ".
   { repeat iExists _. iFrame "∗#%". iPureIntro.
     subst xs CL1'. rewrite !fmap_drop fmap_app /=.
-    rewrite drop_app_le //. rewrite fmap_length.
+    rewrite drop_app_le //. rewrite length_fmap.
     destruct F1 as [?%lookup_fmap_lt_Some _]. lia. }
   iModIntro. iModIntro.
   iSpecialize ("N_t" with "t.n↦ Info_n"). iSpecialize ("Nodes" with "N_t").
@@ -400,7 +399,7 @@ Proof using All.
     assert (xs2 = []) as ->.
     { subst ih2 xs2.
       destruct F2 as (_ & ?%lookup_fmap_lt_Some).
-      rewrite fmap_drop drop_ge //. rewrite fmap_length. lia. }
+      rewrite fmap_drop drop_ge //. rewrite length_fmap. lia. }
     (* Commit empty pop *)
     wp_load.
     iMod ("Commit" with "[●CL_Q ●ih_Q]") as "HΦ".
@@ -412,7 +411,7 @@ Proof using All.
     { repeat iExists _. iFrame "∗#%". by iApply "Nodes". }
 
     wp_pures.
-    iApply "HΦ". by iFrame. }
+    iApply "HΦ". }
 
   (* [head.next] is not null. *)
   iDestruct "CASE" as (n_h1 x_n_h1) "(#h1.n↦ & #Info_n_h1 & N_h1)".
@@ -477,10 +476,10 @@ Proof using All.
   iDestruct (Nodes_access ih4 with "Nodes") as "[N_h4 Nodes]"; [done|].
   iDestruct (node_case with "N_h4") as "[CASE|CASE]".
   { iDestruct "CASE" as (? Hi_t) "[t.n↦ [●CL_T N_t]]". simpl.
-    iDestruct (mapsto_agree with "h1.n↦ t.n↦") as %[= ?].
+    iDestruct (pointsto_agree with "h1.n↦ t.n↦") as %[= ?].
   }
   iDestruct "CASE" as (??) "(#h4.n↦ & #Info_n_h4 & N_h4)".
-  iDestruct (mapsto_agree with "h1.n↦ h4.n↦") as %[= <-].
+  iDestruct (pointsto_agree with "h1.n↦ h4.n↦") as %[= <-].
 
   (* lookup *)
   iDestruct (mono_list_auth_idx_lookup with "●CL_I Info_n_h4") as %Hih4'.
@@ -523,7 +522,7 @@ Proof using All.
 
   wp_pures.
 
-  subst xs4. iApply "HΦ". by iFrame.
+  subst xs4. iApply "HΦ".
 Qed.
 
 #[export] Typeclasses Opaque Queue IsQueue.

@@ -32,33 +32,33 @@ Definition ordset_new_spec' : Prop :=
 Definition ordset_lookup_spec' : Prop :=
   ⊢ ∀ γo oset (x : Z),
   IsOrderedSet γo oset -∗
-  <<< ∀∀ xs, OrderedSet γo xs >>>
+  <<{ ∀∀ xs, OrderedSet γo xs }>>
     ordset_lookup #oset #x @ ⊤,(↑ordsetN ∪ ↑(ptrsN hazptrN)),↑(mgmtN hazptrN)
-  <<< ∃∃ (b : bool), OrderedSet γo xs ∗ ⌜b = bool_decide (x ∈ xs)⌝, RET #b >>>.
+  <<{ ∃∃ (b : bool), OrderedSet γo xs ∗ ⌜b = bool_decide (x ∈ xs)⌝ | RET #b }>>.
 
 Definition ordset_insert_spec' : Prop :=
   ⊢ ∀ γo oset (x : Z),
   IsOrderedSet γo oset -∗
-  <<< ∀∀ xs, OrderedSet γo xs >>>
+  <<{ ∀∀ xs, OrderedSet γo xs }>>
     ordset_insert #oset #x @ ⊤,(↑ordsetN ∪ ↑(ptrsN hazptrN)),↑(mgmtN hazptrN)
-  <<< ∃∃ (b : bool) xs', OrderedSet γo xs' ∗
+  <<{ ∃∃ (b : bool) xs', OrderedSet γo xs' ∗
           ⌜if (b : bool) then
             x ∉ xs ∧ xs' = {[ x ]} ∪ xs
           else
-            x ∈ xs ∧ xs' = xs⌝,
-          RET #b >>>.
+            x ∈ xs ∧ xs' = xs⌝ |
+          RET #b }>>.
 
 Definition ordset_delete_spec' : Prop :=
   ⊢ ∀ γo oset (x : Z),
   IsOrderedSet γo oset -∗
-  <<< ∀∀ xs, OrderedSet γo xs >>>
+  <<{ ∀∀ xs, OrderedSet γo xs }>>
     ordset_delete #oset #x @ ⊤,(↑ordsetN ∪ ↑(ptrsN hazptrN)),↑(mgmtN hazptrN)
-  <<< ∃∃ (b : bool) xs', OrderedSet γo xs' ∗
+  <<{ ∃∃ (b : bool) xs', OrderedSet γo xs' ∗
           ⌜if (b : bool) then
             x ∈ xs ∧ xs' = xs ∖ {[ x ]}
           else
-            x ∉ xs ∧ xs' = xs⌝,
-          RET #b >>>.
+            x ∉ xs ∧ xs' = xs⌝ |
+          RET #b }>>.
 End spec.
 
 Record ordset_code : Type := OrderedSetCode {
@@ -80,7 +80,7 @@ Record ordset_spec {Σ} `{!heapGS Σ} {ordsetN hazptrN : namespace}
   OrderedSet_Timeless : ∀ γo xs, Timeless (OrderedSet γo xs);
   IsOrderedSet_Persistent : ∀ γo oset, Persistent (IsOrderedSet γo oset);
 
-  ordset_new_spec : ordset_new_spec' ordsetN hazptrN ordset_spec_code.(ordset_new) hazptr OrderedSet IsOrderedSet ;
+  ordset_new_spec : ordset_new_spec' ordsetN hazptrN ordset_spec_code.(ordset_new) hazptr OrderedSet IsOrderedSet;
   ordset_lookup_spec : ordset_lookup_spec' ordsetN hazptrN ordset_spec_code.(ordset_lookup) OrderedSet IsOrderedSet;
   ordset_insert_spec : ordset_insert_spec' ordsetN hazptrN ordset_spec_code.(ordset_insert) OrderedSet IsOrderedSet;
   ordset_delete_spec : ordset_delete_spec' ordsetN hazptrN ordset_spec_code.(ordset_delete) OrderedSet IsOrderedSet;

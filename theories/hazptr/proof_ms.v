@@ -12,9 +12,9 @@ Set Printing Projections.
 Local Open Scope nat_scope.
 
 Class msG Σ := MSG {
-  ms_inG :> inG Σ (agreeR natO);
-  ms_mono_listG :> mono_listG (gname * blk * val) Σ;
-  ms_mono_natG :> mono_natG Σ;
+  #[local] ms_nodeG :: inG Σ (agreeR natO);
+  #[local] ms_mono_listG :: mono_listG (gname * blk * val) Σ;
+  #[local] ms_mono_natG :: mono_natG Σ;
 }.
 
 Definition msΣ : gFunctors := #[GFunctor (agreeR natO); mono_listΣ (gname * blk * val); mono_natΣ].
@@ -157,9 +157,9 @@ Lemma Nodes_insert {γz γcl} CL ih i_p γ_p p x_p :
 Proof.
   iIntros (? ->) "Nodes G_p Idx_p".
   unfold Nodes. rewrite !fmap_drop fmap_app /=.
-  rewrite drop_app_le; last by rewrite fmap_length.
+  rewrite drop_app_le; last by rewrite length_fmap.
   iApply big_sepL_snoc. iFrame "Nodes".
-  rewrite drop_length fmap_length.
+  rewrite length_drop length_fmap.
   replace (ih + (length CL - ih)) with (length CL) by lia. iFrame.
 Qed.
 
@@ -208,11 +208,11 @@ Proof.
     iExists CL. iSplit; [done|]. iFrame "●CL_T". iSplit.
     + iIntros. iExists i_p, x_p, None. iFrame "∗#%". iSplit; [done|]. iLeft. iExists CL. iFrame. done.
     + iIntros. iExists i_p, x_p, (Some n_p). iFrame "∗#%". iSplit; [done|].
-      iRight. iExists _,_,_. iFrame "#". done.
+      iRight. done.
   - iDestruct "St_p" as (n_p γ_n_p x_n_p ->) "#[Idx_n_p Info_n_p]". simpl. iRight.
     iExists _,_,_. iSplit; [done|]. iFrame "#".
-    iIntros. iExists _, x_p, (Some n_p). iFrame "∗#". iSplit; [done|]. iRight.
-    iExists _,_,_. iFrame "#". done.
+    iExists (Some n_p). iFrame "∗#". iSplit; [done|]. iRight.
+    done.
 Qed.
 
 Lemma queue_new_spec :
@@ -223,10 +223,10 @@ Proof.
   wp_apply (wp_store_offset with "s↦") as "s↦"; [by simplify_map_eq|]. wp_pures.
   wp_alloc qu as "qu↦" "†qu". wp_pures.
   repeat (wp_apply (wp_store_offset with "qu↦") as "qu↦"; [by simplify_list_eq|]; wp_pures).
-  iEval (rewrite !array_cons !loc_add_assoc //) in "qu↦".
+  iEval (rewrite !array_cons !Loc.add_assoc //) in "qu↦".
   iDestruct "qu↦" as "(qu.h↦ & qu.t↦ & qu.d↦ & _)".
   iMod (mono_list_own_alloc []) as (γcl) "[●CL _]".
-  iMod (mapsto_persist with "qu.d↦") as "#qu.d↦".
+  iMod (pointsto_persist with "qu.d↦") as "#qu.d↦".
   iMod (own_alloc (to_agree 0)) as (γ_s) "#Idx_s"; [done|].
   iMod (mono_list_auth_own_update_app [(γ_s,s,#0)] with "●CL") as "[[●CL_T ●CL] #◯CL]".
   iDestruct (mono_list_idx_own_get 0 with "◯CL") as "Info_s"; [done|].
@@ -320,7 +320,7 @@ Proof using All.
   iSplitL "●CL_I qu.h↦ ●ih_I qu.t↦ ●it Nodes G_t1".
   { iNext. repeat iExists _. iFrame "∗#%". by iApply "Nodes". }
 
-  iIntros "_". wp_pures.
+  wp_pures.
 
   wp_bind (! _)%E. iInv "S" as (?) "(_ & t1↦ & >N_t1 & S)".
   (* It this node actual tail? *)
@@ -411,7 +411,7 @@ Proof using All.
   iAssert (node γcl n _ γ_n) with "[●CL_T]" as "N_n".
   { iExists (it1+1), x, None. iSplit; [done|]. iFrame "Idx_n Info_n". iLeft.
     iExists _. iFrame "●CL_T". iPureIntro. split; [done|].
-    rewrite app_length /=.
+    rewrite length_app /=.
     apply lookup_lt_Some in Hit. (* [length CL1 > 0] *) lia. }
   iMod (hazptr.(hazard_domain_register) (node γcl) with "IHD [$n↦ $†n $N_n]") as "G_n"; [solve_ndisj|].
   iDestruct "●CL" as "[●CL_I ●CL_Q]".
@@ -420,7 +420,7 @@ Proof using All.
   (* commit *)
   iMod ("Commit" with "[●CL_Q ●ih_Q]") as "HΦ".
   { repeat iExists _. iFrame "∗#%". iPureIntro.
-    subst xs CL1'. rewrite !fmap_drop fmap_app /= drop_app_le // fmap_length.
+    subst xs CL1'. rewrite !fmap_drop fmap_app /= drop_app_le // length_fmap.
     destruct F1 as [?%lookup_fmap_lt_Some _]. lia. }
   iModIntro. iModIntro.
   iDestruct (Nodes_insert _ _ (it1+1) with "Nodes G_n Idx_n") as "Nodes"; [lia| |].
@@ -477,7 +477,7 @@ Proof using All.
   iModIntro. iSplitL "●CL_I qu.h↦ ●ih_I qu.t↦ ●it Nodes G_h1".
   { iNext. repeat iExists _. iFrame "∗#%". by iApply "Nodes". }
 
-  iIntros "_". wp_pures. wp_bind (! _)%E.
+  wp_pures. wp_bind (! _)%E.
 
   (* Read the head's next field. If it's null, commit empty pop. *)
   iInv "Inv" as (CL2 h2 γ_h2 ih2 t2 γ_t2 it2)
@@ -487,6 +487,7 @@ Proof using All.
   iDestruct (mono_nat_lb_own_valid with "●ih_I ◯ih1") as %[_ LE_ih12].
   (* snapshots *)
   iDestruct (mono_nat_lb_own_get with "●ih_I") as "#◯ih2".
+  iDestruct (mono_list_lb_own_get with "●CL_I") as "#◯CL2".
   (* Access the protected node *)
   iInv "HeadS" as (?) "(_ & h1↦ & >N_h1 & HeadS)".
   (* Case analysis on the status of node [ih1]. *)
@@ -507,13 +508,13 @@ Proof using All.
       destruct F1 as (?%lookup_fmap_lt_Some & _).
       destruct PF_CL12 as [L ->].
       rename select (_ < length CL1) into HL. clear -HL.
-      rewrite app_length in HL.
+      rewrite length_app in HL.
       assert (length L = 0) as ->%nil_length_inv by lia.
       by rewrite app_nil_r. }
     assert (xs2 = []) as ->.
     { subst ih2 xs2.
       destruct F2 as (_ & ?%lookup_fmap_lt_Some & _).
-      rewrite fmap_drop drop_ge //. rewrite fmap_length. lia. }
+      rewrite fmap_drop drop_ge //. rewrite length_fmap. lia. }
     (* Commit empty pop *)
     wp_apply (wp_load_offset with "h1↦") as "h1↦"; [by simplify_list_eq|].
     iMod ("Commit" with "[●CL_Q ●ih_Q]") as "HΦ"; first by exfr.
@@ -525,7 +526,7 @@ Proof using All.
     wp_apply (hazptr.(shield_drop_spec) with "IHD HeadS") as "_"; [solve_ndisj|].
     wp_seq.
     wp_apply (hazptr.(shield_drop_spec) with "IHD NextS") as "_"; [solve_ndisj|].
-    wp_seq. iApply "HΦ". by iFrame. }
+    wp_seq. iApply "HΦ". }
 
   (* [head.next] is not null. *)
   iDestruct "CASE" as (n_h1 γ_n_h1 x_n_h1 ->) "(#Idx_n_h1 & #Info_n_h1 & N_h1)". simpl.
@@ -539,59 +540,20 @@ Proof using All.
   wp_apply (hazptr.(shield_set_spec) (Some _) with "IHD NextS") as "NextS"; [solve_ndisj..|].
   wp_pures. wp_bind (! _)%E.
 
-  (* validate *)
-  iInv "Inv" as (CL3 h3 γ_h3 ih3 t3 γ_t3 it3)
-              "[Nodes >(●CL_I & qu.h↦ & ●ih_I & qu.t↦ & ●it & %F3)]".
-  iDestruct (get_head_info with "Nodes") as "#Idx_h3"; [by destruct_and! F3|].
-  (* Has the head pointer changed since the protection of [h1]? *)
-  case (decide (h1 = h3)) as [->|NE_h13]; last first.
-  { (* If changed, validation fails *)
-    wp_load.
-    (* close internal inv *)
-    iModIntro. iSplitL "●CL_I qu.h↦ ●ih_I qu.t↦ ●it Nodes"; first by exfr.
-
-    wp_pures.
-    rewrite bool_decide_eq_false_2; last by (intro; simplify_eq).
-    wp_if. wp_apply ("IH" with "AU HeadS NextS"). }
-
-  wp_load.
-
-  (* Head pointer hasn't changed. [ih1 = ih3] *)
-  iDestruct (shield_Nodes_agree _ _ ih3 with "HeadS Idx_h1 Nodes") as %[<- <-]; [by destruct_and! F3..|].
-  (* clean up *)
-  iAssert ⌜ih2 = ih3⌝%I as %->; last clear LE_ih12.
-  { iDestruct (mono_nat_lb_own_valid with "●ih_I ◯ih2") as %[_ ?]. iPureIntro. lia. }
-  iRename "◯ih1" into "◯ih3". iClear "◯ih2".
-  (* snapshot *)
-  iDestruct (mono_list_lb_own_get with "●CL_I") as "#◯CL3".
-
-  (* The invariant has [Managed] of the next node. *)
-  iDestruct (mono_list_auth_idx_lookup with "●CL_I Info_n_h1") as %Hih3'.
-  iDestruct (Nodes_access _ _ (ih3+1) with "Nodes") as "(G_n_h1 & _ & Nodes)"; [lia|..].
-  { apply (f_equal (fmap fst)) in Hih3'. simpl in Hih3'. done. }
-  (* Validate *)
-  iMod (hazptr.(shield_validate) with "IHD G_n_h1 NextS") as "[G_n_h1 NextS]"; [solve_ndisj..|].
-  iSpecialize ("Nodes" with "G_n_h1").
-
-  (* close internal inv *)
-  iModIntro. iSplitL "●CL_I qu.h↦ ●ih_I qu.t↦ ●it Nodes"; first by exfr.
-
-  wp_pures. rewrite bool_decide_eq_true_2; [|done]. wp_pures. wp_bind (! _)%E.
-
   (* read tail pointer *)
   iInv "Inv" as (CL4 h4 γ_h4 ih4 t4 γ_t4 it4)
               "[Nodes >(●CL_I & qu.h↦ & ●ih_I & qu.t↦ & ●it & %F4)]".
   (* snapshots *)
   iDestruct (mono_nat_lb_own_get with "●ih_I") as "#◯ih4".
   iDestruct (mono_nat_lb_own_get with "●it") as "#◯it4".
-  iDestruct (mono_nat_lb_own_valid with "●ih_I ◯ih3") as %[_ LE_ih34].
-  iDestruct (mono_list_auth_lb_valid with "●CL_I ◯CL3") as %[_ PF_CL34].
+  iDestruct (mono_nat_lb_own_valid with "●ih_I ◯ih2") as %[_ LE_ih24].
+  iDestruct (mono_list_auth_lb_valid with "●CL_I ◯CL2") as %[_ PF_CL24].
   (* If the head shield and the tail pointer value are the same, they point to
   the same logical node. *)
   wp_load.
-  iAssert (⌜h3 = t4 → ih3 = it4⌝)%I as %Hih3it4.
+  iAssert (⌜h1 = t4 → ih1 = it4⌝)%I as %Hih1it4.
   { iIntros (->).
-    by iDestruct (shield_Nodes_agree with "HeadS Idx_h3 Nodes") as %[<- <-]; [by destruct_and! F4..|]. }
+    by iDestruct (shield_Nodes_agree with "HeadS Idx_h1 Nodes") as %[<- <-]; [by destruct_and! F4..|]. }
   (* close internal inv *) iModIntro.
   iSplitL "●CL_I qu.h↦ ●ih_I qu.t↦ ●it Nodes"; first by exfr.
 
@@ -600,35 +562,35 @@ Proof using All.
   (* Try advancing the tail. *)
   set (fix_tail := (if: #(bool_decide _) then _ else _)%E) in *.
   iAssert (
-    {{{ hazptr.(Shield) γz s_h (Validated h3 γ_h3 (node γcl) nodeSize) }}}
+    {{{ hazptr.(Shield) γz s_h (Validated h1 γ_h1 (node γcl) nodeSize) }}}
       fix_tail
     {{{ v, RET v;
-        hazptr.(Shield) γz s_h (Validated h3 γ_h3 (node γcl) nodeSize) ∗
-        mono_nat_lb_own γt (ih3+1) }}}
+        hazptr.(Shield) γz s_h (Validated h1 γ_h1 (node γcl) nodeSize) ∗
+        mono_nat_lb_own γt (ih1+1) }}}
   )%I as "HT_fix_tail".
   { subst fix_tail.
     iIntros (Φ') "!> HeadS HΦ'".
-    case (decide (h3 = t4)) as [->|NE_ht].
+    case (decide (h1 = t4)) as [->|NE_ht].
     - rewrite bool_decide_eq_true_2; last done.
-      specialize (Hih3it4 eq_refl) as ->. (* [ih3 = it4] *)
+      specialize (Hih1it4 eq_refl) as ->. (* [ih1 = it4] *)
       wp_pures.
       wp_apply (try_advance_tail_spec with "[$Inv $HeadS $Idx_h1 $Info_h1 $Idx_n_h1 $Info_n_h1 $◯it4]") as (?) "[HeadS #◯it4']".
 
       by iApply ("HΦ'" with "[$HeadS $◯it4']").
-    - rewrite bool_decide_eq_false_2; last first.
-      { unfold not. intros H. by inversion H. }
+    - rewrite bool_decide_eq_false_2; last done.
       wp_pures.
       destruct F4 as (? & ? & LE_ih4it4).
-      have NE_ih3it4 : ih3 ≠ it4.
-      { intros ->. destruct F3 as [Hh3 _].
-        have ? := prefix_lookup_fmap _ _ _ _ _ Hh3 PF_CL34. congruence. }
-      have {LE_ih34 LE_ih4it4 NE_ih3it4}LE_ih3'it4 : ih3 + 1 ≤ it4 by lia.
-      iDestruct (mono_nat_lb_own_le _ LE_ih3'it4 with "◯it4") as "#◯it_ih3'".
-      iApply ("HΦ'" with "[$HeadS $◯it_ih3']"). }
+      have NE_ih1it4 : ih1 ≠ it4.
+      { intros ->. destruct F1 as [Hh1 _].
+        assert (CL1 `prefix_of` CL4) as PF_CL14. { by transitivity CL2. }
+        have ? := prefix_lookup_fmap _ _ _ _ _ Hh1 PF_CL14. congruence. }
+      have {LE_ih24 LE_ih4it4 NE_ih1it4}LE_ih1'it4 : ih1 + 1 ≤ it4 by lia.
+      iDestruct (mono_nat_lb_own_le _ LE_ih1'it4 with "◯it4") as "#◯it_ih1'".
+      iApply ("HΦ'" with "[$HeadS $◯it_ih1']"). }
 
-  wp_apply ("HT_fix_tail" with "[$HeadS]") as (v_clear) "[HeadS #◯it_ih3']".
+  wp_apply ("HT_fix_tail" with "HeadS") as (v_clear) "[HeadS #◯it_ih1']".
   wp_seq.
-  iClear (fix_tail Hih3it4 v_clear) "HT_fix_tail".
+  iClear (fix_tail Hih1it4 v_clear) "HT_fix_tail".
 
   wp_pures. wp_bind (CmpXchg _ _ _)%E.
 
@@ -637,20 +599,34 @@ Proof using All.
               "[Nodes >(●CL_I & qu.h↦ & ●ih_I & qu.t↦ & ●it & %F6)]".
 
   (* Has the head pointer changed? *)
-  case (decide (h3 = h6)) as [->|NE_h36]; last first.
+  case (decide (h1 = h6)) as [->|NE_h16]; last first.
   { wp_cmpxchg_fail.
     (* close internal inv *)
     iModIntro. iSplitL "●CL_I qu.h↦ ●ih_I qu.t↦ ●it Nodes"; first by exfr.
     wp_pure. wp_if. wp_apply ("IH" with "AU HeadS NextS"). }
 
-  wp_cmpxchg_suc.
+  (* protect next *)
 
-  (* Agree *)
-  iDestruct (shield_Nodes_agree _ _ ih6 with "HeadS Idx_h3 Nodes") as %[<- <-]; [by destruct_and! F6..|].
+  (* agree *)
+  iDestruct (shield_Nodes_agree _ _ ih6 with "HeadS Idx_h1 Nodes") as "#>[<- <-]"; [by destruct_and! F6..|].
+  iClear "Idx_h1".
+  iDestruct (mono_nat_lb_own_valid with "●it ◯it_ih1'") as %[_ LE_ih5it5].
+
+  (* lookup *)
+  iDestruct (mono_list_auth_idx_lookup with "●CL_I Info_n_h1") as %Hih4'.
+  iDestruct (Nodes_access _ _ (ih6+1) with "Nodes") as "(G_n_h1 & ? & Nodes)";[lia|..].
+  { apply (f_equal (fmap fst)) in Hih4'. by simplify_map_eq. }
+
+  wp_cmpxchg_suc; [done|].
+
+  iMod (hazptr.(shield_validate) with "IHD G_n_h1 NextS") as "[G_n_h1 NextS]"; [solve_ndisj|].
+
   (* clean up *)
-  iAssert (⌜ih4 = ih6⌝)%I as %->; last clear LE_ih34.
+  iSpecialize ("Nodes" with "G_n_h1").
+
+  iAssert (⌜ih4 = ih6⌝)%I as %->.
   { iDestruct (mono_nat_lb_own_valid with "●ih_I ◯ih4") as %[_ ?]. iPureIntro. lia. }
-  iRename "◯ih3" into "◯ih6". rename Hih3' into Hih6'. iClear "◯ih4".
+  iRename "◯ih1" into "◯ih6". rename Hih4' into Hih6'. iClear "◯ih4".
 
   (* access AU *)
   iMod "AU" as (xs6) "[Q [_ Commit]]".
@@ -659,9 +635,8 @@ Proof using All.
   (* agree *)
   iDestruct (mono_list_auth_own_agree with "●CL_I ●CL_Q") as %[_ <-].
   iDestruct (mono_nat_auth_own_agree with "●ih_I ●ih_Q") as %[_ <-].
-  iDestruct (mono_nat_lb_own_valid with "●it ◯it_ih3'") as %[_ LE_ih6'it6].
-  iDestruct (mono_list_auth_lb_valid with "●CL_I ◯CL3") as %[_ PF_CL36].
-  have {}Hih6' := prefix_lookup_Some _ _ _ _ Hih6' PF_CL36.
+  iDestruct (mono_nat_lb_own_valid with "●it ◯it_ih1'") as %[_ LE_ih6'it6].
+  iDestruct (mono_list_auth_lb_valid with "●CL_I ◯CL1") as %[_ PF_CL36].
   (* abstract state *)
   rewrite (drop_S _ _ _ Hih6') -Nat.add_1_r fmap_cons /= in Hxs6.
   (* update *)
@@ -695,16 +670,16 @@ Proof using All.
   iDestruct (mono_list_idx_agree with "Info_n_h1 Info_n_h1'") as %[= <-].
   iClear "Idx_n_h1' Info_n_h1'".
   wp_apply (wp_load_offset with "n_h1↦") as "n_h1↦"; [by simplify_list_eq|].
-  iAssert (node _ n_h1 _ _) with "[St_n_h1]" as "N_n_h1"; first by exfr.
-  iSplitL "n_h1↦ N_n_h1"; [iExists ([_;_]); by iFrame|].
+  iAssert (node _ n_h1 _ _) with "[$St_n_h1 $Idx_n_h1 $Info_n_h1]" as "N_n_h1"; [done|].
+  iSplitL "n_h1↦ N_n_h1"; [by iFrame "n_h1↦ N_n_h1"|].
   iModIntro. wp_pures. wp_load.
-  wp_apply (hazptr.(hazard_domain_retire_spec) with "IHD [$G_h6]") as "_"; [solve_ndisj|].
+  wp_apply (hazptr.(hazard_domain_retire_spec) with "IHD G_h6") as "_"; [solve_ndisj|].
   wp_pures.
   wp_apply (hazptr.(shield_drop_spec) with "IHD HeadS") as "_"; [solve_ndisj|].
   wp_seq.
   wp_apply (hazptr.(shield_drop_spec) with "IHD NextS") as "_"; [solve_ndisj|].
   wp_pures.
-  subst xs6. iApply "HΦ". by iFrame.
+  subst xs6. iApply "HΦ".
 Qed.
 
 #[export] Typeclasses Opaque Queue IsQueue.

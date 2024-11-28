@@ -9,20 +9,17 @@ Variable (rcu : rcu_code).
 
 Definition hm_find_inner : val :=
   rec: "loop" "p" "domain" "key" "prev" "curr" :=
-    let: "p'" := NewProph in
-    let: "next" := !("curr" +ₗ #next) in
-    let: "tagged" := (tag "next") ≠ #0 in
-    resolve_proph: "p" to: "tagged" ;;
-    if: "tagged" then
+    let: "next" := Resolve !("curr" +ₗ #next) "p" #() in
+    if: (tag "next") ≠ #0 then
       (if: CAS ("prev" +ₗ #next) "curr" (untag "next") then
         rcu.(rcu_domain_retire) "domain" (untag "curr") #nodeSize;;
-        "loop" "p'" "domain" "key" "prev" (untag "next")
+        "loop" "p" "domain" "key" "prev" (untag "next")
        else
         NONE)
     else
       let: "curr_key" := !("curr" +ₗ #key) in
       if: "curr_key" < "key" then
-        "loop" "p'" "domain" "key" "curr" "next"
+        "loop" "p" "domain" "key" "curr" "next"
       else
         SOME ("curr_key" = "key", "prev", "curr")
 .

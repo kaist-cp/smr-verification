@@ -24,29 +24,23 @@ Definition chain_retire : val :=
       "loop" "domain" (untag "next") "curr".
 
 Definition harris_find_inner : val :=
-  rec: "loop" "pr_tag" "domain" "key" "prev" "curr" "anchor" :=
-    let: "pr_tag'" := NewProph in
-    let: "next" := !("curr" +ₗ #next) in
-    let: "tagged" := (tag "next") ≠ #0 in
-    resolve_proph: "pr_tag" to: "tagged" ;;
-    if: "tagged" then
+  rec: "loop" "pr" "domain" "key" "prev" "curr" "anchor" :=
+    let: "next" := Resolve !("curr" +ₗ #next) "pr" #() in
+    if: (tag "next") ≠ #0 then
       let: "new_anchor" := get_anchor "anchor" "curr" in
-      "loop" "pr_tag'" "domain" "key" "prev" (untag "next") "new_anchor"
+      "loop" "pr" "domain" "key" "prev" (untag "next") "new_anchor"
     else
       let: "curr_key" := !("curr" +ₗ #key) in
       if: "curr_key" < "key" then
-        "loop" "pr_tag'" "domain" "key" "curr" "next" #NULL
+        "loop" "pr" "domain" "key" "curr" "next" #NULL
       else
         if: ("anchor" = #NULL) then
           SOME ("curr_key" = "key", "prev", "curr")
         else
-          let: "pr_tag_cas" := NewProph in
           if: CAS ("prev" +ₗ #next) "anchor" "curr" then
-            let: "next" := !("curr" +ₗ #next) in
-            let: "tagged" := (tag "next") ≠ #0 in
-            resolve_proph: "pr_tag_cas" to: "tagged" ;;
+            let: "next" := Resolve !("curr" +ₗ #next) "pr" #() in
             chain_retire "domain" "anchor" "curr";;
-            if: "tagged" then
+            if: (tag "next") ≠ #0 then
               NONE
             else
               SOME ("curr_key" = "key", "prev", "curr")
@@ -56,10 +50,10 @@ Definition harris_find_inner : val :=
 
 Definition harris_find : val :=
   rec: "loop" "list" "domain" "key" :=
-  let: "pr_tag" := NewProph in
+  let: "pr" := NewProph in
   let: "prev" := !("list" +ₗ #head) in
   let: "curr" := !("prev" +ₗ #next) in
-  match: harris_find_inner "pr_tag" "domain" "key" "prev" "curr" #NULL with
+  match: harris_find_inner "pr" "domain" "key" "prev" "curr" #NULL with
     NONE => "loop" "list" "domain" "key"
   | SOME "res" => "res"
   end

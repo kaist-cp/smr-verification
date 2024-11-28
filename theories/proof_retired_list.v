@@ -61,7 +61,7 @@ Proof.
   wp_rec. wp_pures. wp_alloc r as "r↦" "†r".
   wp_pures.
   repeat (wp_apply (wp_store_offset with "r↦") as "r↦"; [by simplify_list_eq|]; wp_pures).
-  iApply "HΦ". simpl. iFrame. rewrite !array_cons 3!loc_add_assoc loc_add_0.
+  iApply "HΦ". simpl. iFrame. rewrite !array_cons 3!Loc.add_assoc Loc.add_0.
   by iDestruct "r↦" as "($ & $ & $ & $ & _)".
 Qed.
 
@@ -101,10 +101,10 @@ Lemma retired_node_drop_spec :
   retired_node_drop_spec' RetiredNode.
 Proof.
   iIntros (???????) "(r.next↦ & r.ptr↦ & r.size↦ & r.epoch↦ & †r) HΦ".
-  rewrite -!array_singleton loc_add_0.
+  rewrite -!array_singleton Loc.add_0.
   iCombine "r.next↦ r.ptr↦" as "r↦".
   rewrite -array_app.
-  (* rewrite -heap_mapsto_vec_app /=. *)
+  (* rewrite -heap_pointsto_vec_app /=. *)
   iCombine "r↦ r.size↦" as "r↦".
   rewrite -array_app.
   iCombine "r↦ r.epoch↦" as "r↦".
@@ -116,9 +116,9 @@ Lemma retired_list_new_spec :
   retired_list_new_spec' RetiredList.
 Proof.
   iIntros (??) "_ HΦ". wp_rec. wp_alloc r as "r↦" "†r".
-  wp_pures. rewrite loc_add_0 array_singleton. wp_store.
+  wp_pures. rewrite Loc.add_0 array_singleton. wp_store.
   iModIntro. iApply "HΦ".
-  iExists None. rewrite loc_add_0. by iFrame.
+  iExists None. rewrite Loc.add_0. by iFrame.
 Qed.
 
 Lemma retired_list_push_spec :
@@ -144,8 +144,7 @@ Proof.
     iDestruct "AU" as "[_ Commit]".
     wp_cmpxchg_suc.
     iMod ("Commit" with "[-]") as "HΦ".
-    { iExists (Some rNode); iFrame.
-      iExists rNode, hd2. iSplit; auto. iFrame. }
+    { iExists (Some rNode); iFrame. done. }
     iModIntro. wp_pures. by iApply "HΦ".
   - (* fail *)
     iDestruct "AU" as "[Abort _]".

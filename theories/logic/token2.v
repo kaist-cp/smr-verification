@@ -7,7 +7,7 @@ From iris.prelude Require Import options.
 From smr Require Import helpers.
 
 Definition token2R : ucmra :=
-  discrete_funUR (λ (_ : positive * positive), optionUR (exclR unitR)).
+  (positive * positive) -d> optionUR $ exclR $ unitO.
 
 Definition to_token2 (E1 E2 : coPset) : token2R :=
   λ k, if bool_decide (k.1 ∈ E1 ∧ k.2 ∈ E2)
@@ -23,17 +23,6 @@ Section token2R_lemmas.
   Proof.
     intros x. unfold to_token2.
     by case bool_decide.
-  Qed.
-
-  Lemma token2_update_each (R1 R2 : token2R) :
-    (∀ x, R1 x ~~> R2 x) → R1 ~~> R2.
-  Proof.
-    intros H n mz V1 x. specialize (V1 x).
-    destruct mz; simpl in *.
-    - rewrite discrete_fun_lookup_op.
-      rewrite discrete_fun_lookup_op in V1.
-      by apply (H x n (Some (c x))).
-    - by apply (H x n None).
   Qed.
 
   Lemma to_token2_lookup k1 k2 E1 E2 :
@@ -205,7 +194,7 @@ Section lemmas.
     ⊢ |==> token2 γ ∅ E.
   Proof.
     unseal. iMod own_unit as "H". iApply (own_update with "H").
-    apply token2_update_each.
+    apply discrete_fun_update.
     intros []???; rewrite to_token2_lookup_None; set_solver.
   Qed.
 
@@ -213,7 +202,7 @@ Section lemmas.
     ⊢ |==> token2 γ E ∅.
   Proof.
     unseal. iMod own_unit as "H". iApply (own_update with "H").
-    apply token2_update_each.
+    apply discrete_fun_update.
     intros []???; rewrite to_token2_lookup_None; set_solver.
   Qed.
 

@@ -8,7 +8,7 @@ This repository contains the proofs of the following paper, mechanized in Coq wi
 
 ## Build
 This version is known to compile with
-Coq 8.17.1 and
+Coq 8.19.0 and
 development versions of [Iris](https://gitlab.mpi-sws.org/iris/iris) and [Diaframe][]
 as specified in [smr-verification.opam](smr-verification.opam).
 
@@ -20,7 +20,7 @@ opam switch create \
   --no-install \
   --repositories=default,coq-released=https://coq.inria.fr/opam/released,iris-dev=git+https://gitlab.mpi-sws.org/iris/opam.git \
   . ocaml-base-compiler.4.14.1
-opam pin add -n -y coq 8.17.1
+opam pin add -n -y coq 8.19.0
 
 make builddep
 # hit "y" for all prompts, if any
@@ -34,7 +34,7 @@ Some proofs in theories/diaframe/examples may raise warning like this:
 Too many intro patterns were supplied!
 Dropping the following intro patterns:   γ_h1 n1
 Too many IPM names were supplied!
-Please remove "Info_h1", "M_h1", "Nodes", 
+Please remove "Info_h1", "M_h1", "Nodes",
 Subgoal 2 naming problems:
 Too little intro patterns were supplied! Please supply a name for:
   x0 : bool
@@ -67,7 +67,7 @@ and statistics will be saved in [`line_count.tsv`](line_count.tsv) (tab separate
 * [`spec_hazptr.v`](theories/hazptr/spec_hazptr.v): specifications of hazard pointers. (Fig. 5,10, and Appendix A).
 
   | Paper                           | Coq                          |
-  |---------------------------------|------------------------------|
+  | ------------------------------- | ---------------------------- |
   | HPInv                           | `IsHazardDomainT`            |
   | Managed                         | `ManagedT`                   |
   | HPSlot & Protected              | `ShieldT`                    |

@@ -32,18 +32,18 @@ Definition new_rdcss_spec' : Prop :=
 Definition get_spec' : Prop :=
   ⊢ ∀ γ (l_n : loc),
   IsRdcss γ l_n -∗
-  <<< ∀∀ (n : val), Rdcss γ n >>>
+  <<{ ∀∀ (n : val), Rdcss γ n }>>
     get #l_n @ ⊤,(↑rdcssN ∪ ↑(ptrsN hazptrN)),↑(mgmtN hazptrN)
-  <<< Rdcss γ n, RET n >>>.
+  <<{ Rdcss γ n | RET n }>>.
 
 Definition rdcss_spec' : Prop :=
   ⊢ ∀ γ (l_n l_m : loc) (m1 n1 n2 : val),
   ⌜val_is_unboxed (InjLV n1)⌝ →
   ⌜val_is_unboxed m1⌝ →
   IsRdcss γ l_n -∗
-  <<< ∀∀ (m n : val), l_m ↦_(λ _, True) m ∗ Rdcss γ n >>>
+  <<{ ∀∀ (m n : val), l_m ↦_(λ _, True) m ∗ Rdcss γ n }>>
     rdcss #l_m #l_n m1 n1 n2 @ ⊤,(↑rdcssN ∪ ↑(ptrsN hazptrN) ∪ ↑inv_heapN),↑(mgmtN hazptrN)
-  <<< l_m ↦_(λ _, True) m ∗ Rdcss γ (if decide (m = m1 ∧ n = n1) then n2 else n), RET n >>>.
+  <<{ l_m ↦_(λ _, True) m ∗ Rdcss γ (if decide (m = m1 ∧ n = n1) then n2 else n) | RET n }>>.
 
 End spec.
 

@@ -11,8 +11,8 @@ Set Printing Projections.
 Local Open Scope Z.
 
 Class counterG Σ := CounterG {
-  counter_inG :> inG Σ (agreeR ZO);
-  counter_ghost_varG :> ghost_varG Σ Z;
+  #[local] counter_inG :: inG Σ (agreeR ZO);
+  #[local] counter_ghost_varG :: ghost_varG Σ Z;
 }.
 
 Definition counterΣ : gFunctors := #[ghost_varΣ Z; GFunctor (agreeR ZO)].
@@ -56,11 +56,11 @@ Proof.
   wp_lam. wp_alloc c as "c↦" "†c". wp_let.
   simpl. rewrite array_cons array_singleton. iDestruct "c↦" as "[c.n↦ c.d↦]".
   wp_alloc p as "p↦" "†p". rewrite array_singleton.
-  wp_let. wp_store. wp_op. rewrite loc_add_0. wp_store.
+  wp_let. wp_store. wp_op. rewrite Loc.add_0. wp_store.
 
   wp_op.
   wp_store.
-  iMod (mapsto_persist with "c.d↦") as "#c.d↦".
+  iMod (pointsto_persist with "c.d↦") as "#c.d↦".
   iMod (own_alloc (to_agree 0)) as (γ_p) "#Hγ_p"; [done|].
   iMod (ghost_var_alloc 0) as (γc) "[Hγc Hγc']".
   iEval (rewrite -array_singleton) in "p↦".
@@ -84,7 +84,7 @@ Proof using All.
   wp_lam. wp_pures. wp_load. wp_let.
   wp_alloc n as "n↦" "†n". rewrite array_singleton. wp_let.
   wp_apply (rcu.(guard_activate_spec) with "IED G") as (?) "G"; [solve_ndisj|].
-  wp_seq. wp_op. rewrite loc_add_0.
+  wp_seq. wp_op. rewrite Loc.add_0.
 
   (* start counter loop *)
   move: {1}#0=> vn.

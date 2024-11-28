@@ -65,17 +65,17 @@ Definition retired_list_new_spec' : Prop :=
 Definition retired_list_push_spec' : Prop :=
   ∀ rNode r next size epoch (rList : loc) E,
   RetiredNode rNode r next size epoch -∗
-  <<< ∀∀ rs, ▷ RetiredList rList rs >>>
+  <<{ ∀∀ rs, ▷ RetiredList rList rs }>>
     retired_list_push #rList #rNode @ E,∅,∅
-  <<< RetiredList rList ((r,size,epoch)::rs), RET #() >>>.
+  <<{ RetiredList rList ((r,size,epoch)::rs) | RET #() }>>.
 
 Definition retired_list_pop_all_spec' : Prop :=
   ⊢ ∀ (rList : loc) E,
-  <<< ∀∀ rs, ▷ RetiredList rList rs >>>
+  <<{ ∀∀ rs, ▷ RetiredList rList rs }>>
     retired_list_pop_all #rList @ E,∅,∅
-  <<< ∃∃ (rNode : option loc),
-        RetiredList rList [] ∗ RetiredNodes rNode rs,
-      RET #(oloc_to_lit rNode) >>>.
+  <<{ ∃∃ (rNode : option loc),
+        RetiredList rList [] ∗ RetiredNodes rNode rs |
+      RET #(oloc_to_lit rNode) }>>.
 
 Definition retired_nodes_cons' : Prop :=
   ∀ rNode rs,

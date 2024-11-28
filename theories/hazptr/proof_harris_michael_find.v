@@ -31,9 +31,9 @@ Local Lemma hm_find_inner_spec d (prev curr : blk) E γp_a γp_t γl γh γz
   hazptr.(Shield) γz curr_sh c_st -∗
   γ_prev ↪[γp_a]□ (p_k,prev) -∗
   inv listN (HListInternalInv h γp_a γp_t γl γh γz) -∗
-  <<< ∀∀ (L : list inf_Z), HList γl L >>>
+  <<{ ∀∀ (L : list inf_Z), HList γl L }>>
     (hm_find_inner hazptr) #d #k #prev #curr #prev_sh #curr_sh @ @ E, (↑listN ∪ (↑ptrsN hazptrN)), ↑mgmtN hazptrN
-  <<< ∃∃ (b : bool) (v : val) (ret_b : bool) (ret_p ret_c : blk) (ret_p_k ret_c_k : inf_Z) (idx : nat) (γ_ret_p γ_ret_c : gname) (ret_p_sh ret_c_sh : loc),
+  <<{ ∃∃ (b : bool) (v : val) (ret_b : bool) (ret_p ret_c : blk) (ret_p_k ret_c_k : inf_Z) (idx : nat) (γ_ret_p γ_ret_c : gname) (ret_p_sh ret_c_sh : loc),
       ⌜v = if (b : bool) then SOMEV (#ret_b, #ret_p, #ret_c) else NONEV⌝ ∗
       HList γl L ∗
       (if (b : bool) then
@@ -44,8 +44,8 @@ Local Lemma hm_find_inner_spec d (prev curr : blk) E γp_a γp_t γl γh γz
          (if ret_b then ret_c_k = k else (k < ret_c_k)%inf_Z)⌝
       else
         True%I
-      ),
-      RET (#ret_p_sh, #ret_c_sh, v),
+      ) |
+      RET (#ret_p_sh, #ret_c_sh, v);
       ∃ ret_p_st ret_c_st,
       ⌜if (b : bool) then
         ret_p_st = (Validated ret_p γ_ret_p (node γp_a γp_t) nodeSize) ∧
@@ -53,21 +53,21 @@ Local Lemma hm_find_inner_spec d (prev curr : blk) E γp_a γp_t γl γh γz
        else
         True⌝ ∗
       hazptr.(Shield) γz ret_p_sh ret_p_st ∗ hazptr.(Shield) γz ret_c_sh ret_c_st
-  >>>.
+  }>>.
 Proof using DISJN.
   intros p_k_LT_k ?.
   iIntros "#IHD pS cS #p↪□ #IsHarris" (Φ) "AU".
   iLöb as "IH" forall (prev curr p_k p_k_LT_k prev_sh curr_sh γ_prev c_st) "p↪□".
   wp_lam. wp_pure credit: "Lc". wp_pure credit: "Lc'". wp_pure credit: "Lc''". wp_pures.
   wp_apply (hazptr.(shield_set_spec) (Some _) with "IHD cS") as "cS"; [solve_ndisj|]. wp_seq.
-  wp_apply (wp_new_proph with "[//]") as (pr_v_tag pr_tag) "pr". wp_pures.
+  wp_apply (wp_new_proph with "[//]") as (pr_v pr) "pr". wp_pures.
   wp_bind (!_)%E.
   (* Check status of p to see if we will fail. *)
   iInv "pS" as (?) "(_ & p↦ & >node & pS)".
-  iDestruct (harris_node_destruct_agree with "node [//]") as (p_on p_t ->) "[[% p.n↪]|[% #p.n↪□]]"; subst p_t; last first.
+  iDestruct (harris_node_destruct_agree with "node [//]") as (p_on p_t ->) "[% [[% p.n↪]|[% #p.n↪□]]]"; subst p_t; last first.
   all: wp_apply (wp_load_offset with "p↦") as "p↦"; [by simplify_list_eq|].
   { (* prev tagged, fail and return. *)
-    iModIntro. iDestruct (harris_node_combine_on with "p↦ p↪□ [$p.n↪□]" ) as "$"; [by iRight|].
+    iModIntro. iDestruct (harris_node_combine_on with "p↦ p↪□ [% //] [$p.n↪□]" ) as "$"; [by iRight|].
     wp_pures.
     iMod "AU" as (?) "[Labs [_ Commit]]".
     iMod ("Commit" $! false _ false prev curr p_k p_k 0 γ_prev γ_prev with "[$Labs]") as "HΦ"; [done|].
@@ -90,8 +90,8 @@ Proof using DISJN.
   destruct (decide (curr' = curr)) as [->|NE]; last first.
   { (* validation failed, loop. *)
     iModIntro. iSplitL "Linv ●p_all ●p_tag PTRS Nodes".
-    { repeat iExists _. by iFrame "∗#%". }
-    iModIntro. iDestruct (harris_node_combine_some with "p↦ [//] [p.n↪]" ) as "$"; [iLeft; by iFrame|].
+    { by iFrame "∗#%". }
+    iModIntro. iDestruct (harris_node_combine_some with "p↦ [//] [p.n↪]") as "$"; [iLeft; by iFrame|].
     wp_pures. case_bool_decide; [naive_solver|].
     wp_pures.
     by iApply ("IH" with "[%] pS cS AU p↪□").
@@ -102,22 +102,15 @@ Proof using DISJN.
   iAssert (if b then γ_curr ↪[ γp_t ]□ (cn, true) else True)%I as "#c.n↪□b"; [by destruct b|].
   iDestruct (Nodes_combine with "Nodes cM [//] [c.n↪]") as "Nodes"; [done..|].
   (* Check prophecy check for curr *)
-  destruct (prophecy_to_bool pr_v_tag) eqn:Hpr_tag.
+  destruct (prophecy_to_bool pr_v) eqn:Hpr_v.
   { (* Tagged, so cannot commit here. *)
     iModIntro. iSplitL "Linv ●p_all ●p_tag PTRS Nodes".
-    { repeat iExists _. by iFrame "∗#%". } clear dependent L idx p_all p_tag.
+    { by iFrame "∗#%". } clear dependent L idx p_all p_tag.
     iModIntro. iDestruct (harris_node_combine_some with "p↦ [//] [p.n↪]" ) as "$"; [iLeft; by iFrame|].
-    wp_pures. case_bool_decide; [|naive_solver].
-    wp_pures. wp_bind (!_)%E.
+    wp_pures. wp_bind (Resolve _ _ _)%E.
     iInv "cS" as (?) "(_ & c↦ & >node & cS)".
-    iDestruct (harris_node_destruct_agree with "node [//]") as (c_on c_t ->) "[[% c.n↪]|[% #c.n↪□]]"; subst c_t.
-    all: wp_apply (wp_load_offset with "c↦") as "c↦"; [by simplify_list_eq|].
-    { (* not tagged, impossible *)
-      iModIntro. iDestruct (harris_node_combine_on with "c↦ c↪□ [c.n↪]") as "$"; [iLeft; by iFrame|].
-      wp_pures.
-      wp_apply (wp_resolve_proph with "pr") as  (?) "[%Heq _]".
-      subst pr_v_tag. inversion Hpr_tag.
-    }
+    iDestruct (harris_node_destruct_agree with "node [//]") as (c_on c_t ->) "[% [[% c.n↪]|[% #c.n↪□]]]"; subst c_t.
+    all: wp_apply (wp_resolve_load_offset with "[$pr $c↦]") as (?) "(% & _ & c↦)"; [by simplify_list_eq|]; subst pr_v; inversion Hpr_v.
     iInv "IsHarris" as (p_all p_tag L) "(>Linv & >●p_all & >●p_tag & >PTRS & Nodes & >(%HL & %HLh & %HLt & %Hdom))".
     iMod (lc_fupd_elim_later with "Lc' Nodes") as "Nodes".
     iDestruct (ghost_map_lookup with "●p_all c↪□") as %Hptrs_c.
@@ -130,16 +123,15 @@ Proof using DISJN.
     iDestruct "c.n" as (γ_c_n c_n c_n_k) "[c.n↪□' c_n↪□]".
     iDestruct (ghost_map_elem_agree with "c.n↪□ c.n↪□'") as %[= ->]; iClear "c.n↪□'"; simpl in *.
     iModIntro. iSplitL "Linv ●p_all ●p_tag PTRS Nodes".
-    { repeat iExists _. by iFrame "∗#%". }
+    { by iFrame "∗#%". }
     iModIntro. iDestruct (harris_node_combine_some with "c↦ [//] [$c.n↪□]") as "$"; [by iRight|].
     clear dependent p_all p_tag L. wp_pures.
-    wp_apply (wp_resolve_proph with "pr") as  (?) "_".
-    wp_pures. wp_apply (harris_helping_cas_spec with "[$pS $cS $Lc'']") as ([]) "(pS & cS & cM)"; [done..|iFrame "#"| |]; last first.
+    wp_apply (harris_helping_cas_spec with "[$pS $cS $Lc'']") as ([]) "(pS & cS & cM)"; [done..|iFrame "#"| |]; last first.
 
     all: wp_pures.
     { iMod "AU" as (?) "[Labs [_ Commit]]".
       iMod ("Commit" $! false _ false prev curr p_k p_k 0 γ_prev γ_prev with "[$Labs]") as "HΦ"; [done|].
-      iApply "HΦ". iModIntro. repeat iExists _. iFrame.
+      iApply "HΦ". iModIntro. iFrame.
     }
     wp_apply (hazptr.(hazard_domain_retire_spec) with "IHD cM") as "_"; [solve_ndisj|]. wp_pures.
     by iApply ("IH" with "[%] pS cS AU p↪□").
@@ -148,38 +140,26 @@ Proof using DISJN.
   (* assert that we must not be tagged. *)
   destruct b.
   { iModIntro. iSplitL "Linv ●p_all ●p_tag PTRS Nodes".
-    { repeat iExists _. by iFrame "∗#%". }
+    { by iFrame "∗#%". }
     iModIntro. iDestruct (harris_node_combine_some with "p↦ [//] [p.n↪]") as "$"; [iLeft; by iFrame|].
     clear dependent L p_all p_tag idx.
-    wp_pures. case_bool_decide; [|naive_solver].
-    wp_pures. wp_bind (!_)%E.
+    wp_pures. wp_bind (Resolve _ _ _)%E.
     iInv "cS" as (?) "(_ & c↦ & >node & cS)".
-    iDestruct (harris_node_destruct_agree with "node [//]") as (c_on c_t ->) "[[% c.n↪]|[% c.n↪]]"; subst c_t.
-    all: iDestruct (ghost_map_elem_agree with "c.n↪□b c.n↪") as %[= <-]; iClear "c.n↪".
-    wp_apply (wp_load_offset with "c↦") as "c↦"; [by simplify_list_eq|].
-    iModIntro. iDestruct (harris_node_combine_on with "c↦ [//] [$c.n↪□b]") as "$"; [by iRight|].
-    wp_pures.
-    wp_apply (wp_resolve_proph with "pr") as  (?) "[%Heq _]".
-    subst pr_v_tag. inversion Hpr_tag.
+    iDestruct (harris_node_destruct_agree with "node [//]") as (c_on c_t ->) "[% [[% c.n↪]|[% c.n↪]]]"; subst c_t.
+    all: wp_apply (wp_resolve_load_offset with "[$pr $c↦]") as (?) "(% & _ & c↦)"; [by simplify_list_eq|]; subst pr_v; inversion Hpr_v.
+    iDestruct (ghost_map_elem_agree with "c.n↪□b c.n↪") as %[= <-]; iClear "c.n↪".
   }
   (* Check key range *)
   destruct (decide (c_k < k)%inf_Z) as [LT|GE].
   { (* Go into next iteration. *)
     iModIntro. iSplitL "Linv ●p_all ●p_tag PTRS Nodes".
-    { repeat iExists _. by iFrame "∗#%". }
+    { by iFrame "∗#%". }
     iModIntro. iDestruct (harris_node_combine_some with "p↦ [//] [p.n↪]") as "$"; [iLeft; by iFrame|].
     clear dependent L p_all p_tag idx.
-    wp_pures. case_bool_decide; [|naive_solver].
-    wp_pures. wp_bind (!_)%E.
+    wp_pures. wp_bind (Resolve _ _ _)%E.
     iInv "cS" as (?) "(_ & c↦ & >node & cS)".
-    iDestruct (harris_node_destruct_agree with "node [//]") as (c_on c_t ->) "[[% c.n↪]|[% #c.n↪□]]"; subst c_t; last first.
-    all: wp_apply (wp_load_offset with "c↦") as "c↦"; [by simplify_list_eq|].
-    { (* Cannot be not tagged. *)
-      iModIntro. iDestruct (harris_node_combine_on with "c↦ [//] [$c.n↪□]") as "$"; [by iRight|].
-      wp_pures.
-      wp_apply (wp_resolve_proph with "pr") as  (?) "[%Heq _]".
-      subst pr_v_tag. inversion Hpr_tag.
-    }
+    iDestruct (harris_node_destruct_agree with "node [//]") as (c_on c_t ->) "[% [[% c.n↪]|[% #c.n↪□]]]"; subst c_t; last first.
+    all: wp_apply (wp_resolve_load_offset with "[$pr $c↦]") as (?) "(% & _ & c↦)"; [by simplify_list_eq|]; subst pr_v; inversion Hpr_v.
     iInv "IsHarris" as (p_all p_tag L) "(>Linv & >●p_all & >●p_tag & >PTRS & Nodes & >(%HL & %HLh & %HLt & %Hdom))".
     iMod (lc_fupd_elim_later with "Lc' Nodes") as "Nodes".
     iDestruct (ghost_map_lookup with "●p_all c↪□") as %Hptrs_c.
@@ -196,16 +176,14 @@ Proof using DISJN.
     apply list_lookup_fmap_Some in HLc_n as [[[c_n_k ?] [??]] [HLc_n [= <- <-]]].
     iDestruct (get_persistent_Nodes with "Nodes") as (?) "#(c_n↪□ & _)"; [exact HLc_n|].
     iModIntro. iSplitL "Linv ●p_all ●p_tag PTRS Nodes".
-    { repeat iExists _. by iFrame "∗#%". }
+    { by iFrame "∗#%". }
     iModIntro. iDestruct (harris_node_combine_some with "c↦ [//] [c.n↪]") as "$"; [iLeft; by iFrame|].
     clear dependent L p_all p_tag idx.
-    wp_pures.
-    wp_apply (wp_resolve_proph with "pr") as  (?) "_".
     wp_pures. wp_bind (!_)%E.
     iInv "cS" as (?) "(_ & c↦ & >node & cS)".
-    iDestruct (harris_node_destruct_agree with "node [//]") as (c_on c_t ->) "c.n".
+    iDestruct (harris_node_destruct_agree with "node [//]") as (c_on c_t ->) "[% c.n]".
     wp_apply (wp_load_offset with "c↦") as "c↦"; [by simplify_list_eq|].
-    iModIntro. iDestruct (harris_node_combine_on with "c↦ c↪□ c.n") as "$".
+    iModIntro. iDestruct (harris_node_combine_on with "c↦ c↪□ [% //] c.n") as "$".
     wp_pures. case_bool_decide; [|naive_solver].
     wp_pures.
     by iApply ("IH" with "[%] cS pS AU c↪□").
@@ -232,26 +210,22 @@ Proof using DISJN.
     - by rewrite Nat.sub_diag.
   }
   iModIntro. iSplitL "Linv ●p_all ●p_tag PTRS Nodes".
-  { repeat iExists _. by iFrame "∗#%". }
+  { by iFrame "∗#%". }
   iModIntro. iDestruct (harris_node_combine_some with "p↦ p↪□ [p.n↪]") as "$"; [iLeft; by iFrame|].
   clear dependent L p_all p_tag.
-  wp_pures. iEval (case_bool_decide; [|naive_solver]).
-  wp_pures. wp_bind (!_)%E.
+  wp_pures. wp_bind (Resolve _ _ _)%E.
   iInv "cS" as (?) "(_ & c↦ & >node & cS)".
   iDestruct (harris_node_destruct_agree with "node [//]") as (? c_t ->) "c.n".
-  wp_apply (wp_load_offset with "c↦") as "c↦"; [by simplify_list_eq|].
-  iModIntro. iDestruct (harris_node_combine_on with "c↦ [//] c.n") as "$".
-  wp_pures.
-  wp_apply (wp_resolve_proph with "pr") as (pr_v_tag') "[%Heq _]".
-  rewrite Heq /= in Hpr_tag. destruct c_t; simpl in *. 2,3: naive_solver.
-  clear dependent pr_v_tag pr_v_tag' Hpr_tag. simpl in *.
+  all: wp_apply (wp_resolve_load_offset with "[$pr $c↦]") as (?) "(% & _ & c↦)"; [by simplify_list_eq|]; subst pr_v.
+  iDestruct "c.n" as "[% [[% c.n]|[% #c.n□]]]"; subst c_t; inversion Hpr_v.
+  iModIntro. iDestruct (harris_node_combine_on with "c↦ [//] [% //] [c.n]") as "$"; [iLeft; by iFrame|].
   wp_pures. wp_bind (!_)%E.
   iInv "cS" as (?) "(_ & c↦ & >node & cS)".
-  iDestruct (harris_node_destruct_agree with "node [//]") as (? c_t ->) "c.n".
+  iDestruct (harris_node_destruct_agree with "node [//]") as (? c_t ->) "[% c.n]".
   wp_apply (wp_load_offset with "c↦") as "c↦"; [by simplify_list_eq|].
-  iModIntro. iDestruct (harris_node_combine_on with "c↦ [//] c.n") as "$".
-  wp_pures. iEval (case_bool_decide; [naive_solver|]).
-  wp_pures. iApply "HΦ". iModIntro. repeat iExists _. by iFrame.
+  iModIntro. iDestruct (harris_node_combine_on with "c↦ [//] [% //] c.n") as "$".
+  wp_pures. clear dependent Hpr_v. iEval (rewrite bool_decide_eq_false_2 //).
+  wp_pures. iApply "HΦ". iModIntro. by iFrame.
 Qed.
 
 Lemma hm_find_spec :
@@ -267,7 +241,7 @@ Proof using DISJN.
   iMod (lc_fupd_elim_later with "Lc Nodes") as "Nodes".
   iDestruct (Nodes_remove with "Nodes") as (h_on) "[(hM & _ & h.n↪ & %HLh_n) Nodes]"; [exact HLh|]; simpl in *.
   iInv "hM" as (?) "(_ & h↦ & >node & hM)".
-  iDestruct (harris_node_destruct_agree with "node [//]") as (? h_t ->) "[[% h.n↪']|[% #h.n↪']]"; subst h_t.
+  iDestruct (harris_node_destruct_agree with "node [//]") as (? h_t ->) "[% [[% h.n↪']|[% #h.n↪']]]"; subst h_t.
   all: iDestruct (ghost_map_elem_agree with "h.n↪ h.n↪'") as %[= <-].
   wp_apply (wp_load_offset with "h↦") as "h↦"; [by simplify_list_eq|].
   iDestruct (Nodes_combine with "Nodes hM [] [h.n↪']") as "Nodes"; [done..|].
@@ -280,10 +254,10 @@ Proof using DISJN.
   iDestruct (get_persistent_Nodes with "Nodes") as (h_on) "#(c↪□ & _)"; [exact HLh_n'|].
   iModIntro. iSplitL "h↦ h.n↪".
   { iExists _. iFrame "h↦". iSplit; [done|]. iNext. iExists _,(Some (_,_)),_. simpl.
-    iFrame "#". iSplit; [done|]. iLeft. by iSplit.
+    iFrame "#". iSplit; [done|]. iSplit; [done|]. iLeft. by iSplit.
   }
   iModIntro. iSplitL "Linv ●p_all ●p_tag PTRS Nodes".
-  { repeat iExists _. by iFrame "∗#%". } rewrite HLh_n /=. clear dependent p_all p_tag L h_on c_b.
+  { by iFrame "∗#%". } rewrite HLh_n /=. clear dependent p_all p_tag L h_on c_b.
   wp_pures.
   wp_apply (hazptr.(shield_set_spec) (Some _) with "IHD pS") as "pS"; [solve_ndisj|]. wp_seq.
   wp_apply (fupd_wp).
@@ -293,7 +267,7 @@ Proof using DISJN.
   iMod (hazptr.(shield_validate) with "IHD hM pS") as "[hM pS]"; [solve_ndisj|].
   iDestruct (Nodes_combine with "Nodes hM [] [h.n↪]") as "Nodes"; [done..|].
   iModIntro. iSplitL "Linv ●p_all ●p_tag PTRS Nodes".
-  { repeat iExists _. by iFrame "∗#%". } clear dependent p_all p_tag L h_on.
+  { by iFrame "∗#%". } clear dependent p_all p_tag L h_on.
   iModIntro.
   awp_apply (hm_find_inner_spec with "IHD pS cS h↪□ IsHarris"); [naive_solver|done|].
   iApply (aacc_aupd with "AU"); [done|].
@@ -304,7 +278,7 @@ Proof using DISJN.
     wp_pures. wp_apply ("IH" with "pS cS AU").
   }
   iDestruct "Commit" as "(#ret_p↪□ & #ret_c↪□ & Post)".
-  iModIntro. iRight. repeat iExists _. iFrame "Post ∗#%".
+  iModIntro. iRight. iFrame "Post ∗#%". iExists _,_.
   iIntros "HΦ !> Post". iDestruct "Post" as (p_st' c_st' [-> ->]) "[pS cS]".
   wp_pures. iApply ("HΦ" with "[$pS $cS]").
 Qed.

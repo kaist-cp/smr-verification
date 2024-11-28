@@ -10,7 +10,7 @@ From smr.diaframe.hints Require Import ghost_var_hints array_hints.
 From smr Require Import helpers no_recl.spec_stack no_recl.code_treiber.
 
 Class treiberG Σ := TreiberG {
-  treiber_ghost_varG :> ghost_varG Σ (list val);
+  #[local] treiber_ghost_varG :: ghost_varG Σ (list val);
 }.
 
 Definition treiberΣ : gFunctors := #[ghost_varΣ (list val)].

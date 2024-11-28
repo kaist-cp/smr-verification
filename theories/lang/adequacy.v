@@ -6,12 +6,12 @@ From smr.lang Require Import proofmode notation.
 From iris.prelude Require Import options.
 
 Class heapGpreS Σ := HeapGpreS {
-  heapGpreS_iris :> invGpreS Σ;
-  heapGpreS_heap :> ghost_mapG Σ loc val;
-  heapGpreS_inv_heap :> inG Σ (authR inv_heap_mapUR);
-  heapGS_freeable :> inG Σ (authR heap_freeableUR);
-  heapGpreS_proph :> proph_mapGpreS proph_id (val * val) Σ;
-  heapGS_step_cnt :> mono_natG Σ;
+  #[global] heapGpreS_iris :: invGpreS Σ;
+  #[global] heapGpreS_heap :: ghost_mapG Σ loc val;
+  #[global] heapGpreS_inv_heap :: inG Σ (authR inv_heap_mapUR);
+  #[global] heapGS_freeable :: inG Σ (authR heap_freeableUR);
+  #[global] heapGpreS_proph :: proph_mapGpreS proph_id (val * val) Σ;
+  #[global] heapGS_step_cnt :: mono_natG Σ;
 }.
 
 Definition heapΣ : gFunctors :=
@@ -51,7 +51,7 @@ Proof.
                           proph_map_interp κs σ.(used_proph_id) ∗
                           mono_nat_auth_own nγ 1 ns))%I.
   iExists [(λ v, ⌜φ v⌝%I)], (λ _, True)%I, _ => /=.
-  iFrame. iSplitL "Hfγ". { iExists ∅. by iFrame. }
+  iFrame. iSplit. { by iFrame. }
   iIntros (es' t2' -> ? ?) " _ H _".
   iApply fupd_mask_intro_discard; [done|]. iSplit; [|done].
   iDestruct (big_sepL2_cons_inv_r with "H") as (e' ? ->) "[Hwp H]".

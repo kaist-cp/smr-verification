@@ -1,5 +1,5 @@
-From iris.algebra Require Import excl agree gset auth.
-From iris.base_logic.lib Require Import invariants ghost_var ghost_map.
+From iris.algebra Require Import agree.
+From iris.base_logic.lib Require Import invariants ghost_var ghost_map token.
 From smr.program_logic Require Import atomic.
 From smr.lang Require Import proofmode notation.
 From iris.prelude Require Import options.
@@ -12,15 +12,15 @@ Local Instance offer_state_eq_dec : EqDecision offer_state.
 Proof. solve_decision. Qed.
 
 Class elimstackG Σ := ElimstackG {
-  elimstack_ghost_varG :> ghost_varG Σ (list val);
-  elimstack_inG :> inG Σ (agreeR (prodO valO (optionO blkO)));
-  elimstack_tokG :> inG Σ (exclR unitO);
-  elimstack_ghost_var2G :> ghost_varG Σ offer_state;
-  elimstack_offer_gmapG :> ghost_mapG Σ blk gname;
-  elimstack_var_tokG :> inG Σ (agreeR valO);
+  #[local] elimstack_stackG :: ghost_varG Σ (list val);
+  #[local] elimstack_nodeG :: inG Σ (agreeR (prodO valO (optionO blkO)));
+  #[local] elimstack_tokG :: tokenG Σ;
+  #[local] elimstack_offerG :: ghost_varG Σ offer_state;
+  #[local] elimstack_offer_mapG :: ghost_mapG Σ blk gname;
+  #[local] elimstack_offer_valG :: inG Σ (agreeR valO);
 }.
 
-Definition elimstackΣ : gFunctors := #[ghost_varΣ (list val); GFunctor (agreeR (prodO valO (optionO blkO))); GFunctor (exclR unitO); ghost_varΣ offer_state; ghost_mapΣ blk gname; GFunctor (agreeR valO)].
+Definition elimstackΣ : gFunctors := #[ghost_varΣ (list val); GFunctor (agreeR (prodO valO (optionO blkO))); tokenΣ; ghost_varΣ offer_state; ghost_mapΣ blk gname; GFunctor (agreeR valO)].
 
 Global Instance subG_elimstackΣ {Σ} :
   subG elimstackΣ Σ → elimstackG Σ.
@@ -36,7 +36,7 @@ Let offerN := elimN .@ "offer".
 (* iExists + iFrame *)
 Ltac exfr := repeat (repeat iExists _; iFrame "∗#%").
 
-Variable (rcu : rcu_simple_spec Σ rcuN).
+Context (rcu : rcu_simple_spec Σ rcuN).
 
 Definition node_info γ_p (x : val) (n : option blk) :=
   own γ_p (to_agree (x, n)).
@@ -65,7 +65,7 @@ Definition offer_state_rep (st : offer_state) : Z :=
   end.
 
 Definition offer_info γ_p (v : val) (st : offer_state) : iProp :=
-  ∃ (γ_pv γ_po : gname), ⌜γ_p = encode (γ_pv, γ_po)⌝ ∗ ghost_var γ_pv (1/2)%Qp st ∗ own γ_po (to_agree v).
+  ∃ (γ_pv γ_po : gname), ⌜γ_p = encode (γ_pv, γ_po)⌝ ∗ ghost_var γ_pv (1/2) st ∗ own γ_po (to_agree v).
 
 Definition offer_data (p : loc) lv γ_p : iProp :=
   ∃ x st, ⌜lv = [ x; #(offer_state_rep st) ]⌝ ∗ offer_info γ_p x st.
@@ -81,7 +81,7 @@ Definition offer_inv (offer_loc : blk) (v : val) (γn γo : gname) (P Q : iProp)
     match st with
     | OfferPending => P
     | OfferAccepted => Q
-    | _ => own γo (Excl ())
+    | _ => token γo
     end.
 
 (* Ownership of the stack *)
@@ -92,7 +92,7 @@ Global Instance EStack_Timeless γs xs: Timeless (EStack γs xs).
 Proof. apply _. Qed.
 
 Definition stack_push_au γ v Q : iProp :=
-  AU << ∃∃ l, EStack γ l>> @ ⊤∖(↑elimN ∪ ↑ptrsN rcuN),↑mgmtN rcuN << EStack γ (v :: l), COMM Q >>.
+  AU <{ ∃∃ l, EStack γ l }> @ ⊤∖(↑elimN ∪ ↑ptrsN rcuN),↑mgmtN rcuN <{ EStack γ (v :: l), COMM Q }>.
 
 Definition IsOffer (γe γ : gname) (offer_rep : option blk) (offers : gmap blk gname) : iProp :=
   match offer_rep with
@@ -132,14 +132,14 @@ Proof.
   iIntros (γe d Φ) "!> #IED HΦ".
   wp_lam. wp_alloc st as "st↦" "†st". wp_pures.
   repeat (wp_apply (wp_store_offset with "st↦") as "st↦"; [by simplify_list_eq|]; wp_pures).
-  rewrite !array_cons !loc_add_assoc.
+  rewrite !array_cons !Loc.add_assoc.
   iDestruct "st↦" as "(st.h↦ & st.of↦ & st.d↦ & _)".
   iMod (ghost_var_alloc []) as (γs) "[Hγs Hγs']".
   iMod (ghost_map_alloc_empty) as (γof) "Hγof".
   remember (encode (γs, γof)) as γ eqn:Hγ.
-  iMod (mapsto_persist with "st.d↦") as "#st.d↦".
+  iMod (pointsto_persist with "st.d↦") as "#st.d↦".
   iMod (inv_alloc stackN _ (EStackInternalInv st γe γ γs γof) with "[st.h↦ Hγs st.of↦ Hγof]") as "#Hinv_stack".
-  { iNext. iExists None, []. rewrite loc_add_0. iFrame. iExists None, ∅. by iFrame. }
+  { iNext. iExists None, []. rewrite Loc.add_0. iFrame "∗#%". iExists None. iFrame. auto. }
   iApply ("HΦ" $! γ). iSplitR "Hγs'"; by exfr.
 Qed.
 
@@ -176,7 +176,7 @@ Proof using All.
     iModIntro. wp_pures.
     wp_apply (wp_store_offset with "n↦") as "n↦"; [by simplify_list_eq|]; wp_pures.
     (* make an offer *)
-    iMod (own_alloc (Excl ())) as (γo) "Htok"; [done|].
+    iMod token_alloc as (γo) "Htok".
     iMod (ghost_var_alloc OfferPending) as (γn_v) "[Hγn_v Hγn_v']".
     iMod (own_alloc (to_agree x)) as (γn_o) "#Hγn_o"; [done|].
     remember (encode (γn_v, γn_o)) as γn eqn:Hγn.
@@ -194,7 +194,7 @@ Proof using All.
     iMod (ghost_map_insert _ γn with "γof") as "[γof key]"; [apply Hn|].
     iDestruct (big_sepM_insert with "[$Hoffers $G_new]") as "Hoffers"; [done|].
     iModIntro. iSplitL "Hplist st.h↦ Hγs st.of↦ γof Hoffers".
-    { repeat iExists _. iFrame "∗#%". iExists (Some n), _. iFrame "∗#%". exfr. by simplify_map_eq. }
+    { repeat iExists _. iFrame "∗#%". iExists (Some n). iFrame "∗#%". by simplify_map_eq. }
     (* Retract the offer *)
     wp_pures. wp_bind (_ <- _)%E. clear h2 xs2.
     iInv "Hinv_stack" as (h2 xs2) "(Hplist & >st.h↦ & >Hγs & (%offer_rep' & %offers' & st.of↦ & _ & >γof & Hoffers))".
@@ -207,7 +207,7 @@ Proof using All.
     iModIntro. iSplitL "Hplist st.h↦ Hγs st.of↦ γof Hoffers".
     { repeat iExists _. iFrame "∗#%". iExists None. exfr. }
     (* See if someone took it *)
-    wp_pure credit:"Hlc". wp_pures.
+    wp_pures.
     wp_bind (CmpXchg _ _ _). clear offer_rep Hn offers h2 xs2.
     iInv "G_new" as (lv) "(_ & n↦ & >Hod & G_new)".
     iDestruct "Hod" as (v stat) "[-> (%γn_v' & %γn_o' & %Hγn' & Hγn_v & #Hγn_o')]". encode_agree Hγn.
@@ -222,14 +222,12 @@ Proof using All.
       { iExists OfferRevoked. exfr. }
       do 2 iModIntro. iSplitL "n↦ Hγn_v".
       { iExists _. iFrame "n↦". iSplitR; first done. iExists _, OfferRevoked. iSplit; first done. exfr. }
-      iMod (lc_fupd_elim_later with "Hlc Hstat'") as "AU".
       wp_pures. wp_load. wp_let.
       wp_apply (rcu.(rcu_domain_retire_spec) with "IED G_new") as "_"; [solve_ndisj|].
-      wp_seq. wp_apply ("IH" with "st.d↦ G AU").
+      wp_seq. wp_apply ("IH" with "st.d↦ G Hstat'").
     + (* OfferRevoked --> impossible case *)
       iDestruct (ghost_var_agree with "Hγn_v Hγn_v'") as %<-.
-      iDestruct "Hstat'" as ">Htok'".
-      iCombine "Htok Htok'" gives %[].
+      iMod "Hstat'". iCombine "Htok Hstat'" gives %[].
     + (* OfferAccepted *)
       wp_apply (wp_cmpxchg_fail_offset with "n↦") as "n↦"; [by simplify_list_eq|done|by constructor|].
       iDestruct (ghost_var_agree with "Hγn_v Hγn_v'") as %<-.
@@ -274,7 +272,7 @@ Proof using All.
   iDestruct "Hplist" as (γ_h1 n1) "(G_h1 & #Info_h1 & Hplist)".
   iMod (rcu.(guard_protect) with "IED G_h1 G") as "(G_h1 & G & #h1Info)"; [solve_ndisj|].
   iMod ("Hclose" with "[- G AU]") as "_".
-  { iExists (Some h1), (x1 :: xs1). iFrame. simpl. iExists γ_h1, n1. iFrame "∗#%". }
+  { iExists (Some h1), (x1 :: xs1). iFrame. simpl. iFrame "∗#%". }
   iModIntro. wp_pures. wp_bind (! _)%E.
   wp_apply (guard_read node with "[$h1Info $G]") as (??) "(G & #Info_h1' & %EQ)"; [solve_ndisj|lia|].
   iDestruct "Info_h1'" as (x1' n1') "[-> Info_h1']". injection EQ as [= <-].
@@ -320,9 +318,8 @@ Proof using All.
     wp_load.
     iMod (rcu.(guard_protect) with "IED G_γn G") as "(G_γn & G & #oInfo)"; [solve_ndisj|].
     iModIntro. iSplitR "AU G".
-    { repeat iExists _. iFrame "∗#%". iExists (Some _). exfr.
-      iSplitR; first by exfr. by iApply "Hoffers". }
-    wp_pure credit:"Hlc". wp_pures. wp_bind (CmpXchg _ _ _).
+    { iFrame "∗#%". by iApply "Hoffers". }
+    wp_pures. wp_bind (CmpXchg _ _ _).
     iInv "oInfo" as (lv) "(_ & n↦ & >Hod & G)".
     iDestruct "Hod" as (x stat ->) "(%γn_v & %γn_o & %Hγn & Hγn_v & #Hγn_o)".
     destruct (decide (stat = OfferPending)) as [->|NE]; last first.
@@ -330,14 +327,14 @@ Proof using All.
       wp_apply (wp_cmpxchg_fail_offset with "n↦") as "n↦"; [by simplify_list_eq|by destruct stat|by constructor|].
       iModIntro. iSplitL "n↦ Hγn_v". { iExists _. iFrame "n↦". iSplit; [done|]. iExists x, stat. iSplit; [done|]. exfr. }
       wp_pures. wp_apply ("IH" with "AU G"). }
-    (* CAS at state position succeeded *)
-    wp_apply (wp_cmpxchg_suc_offset with "n↦") as "n↦"; [by simplify_list_eq|done|by constructor|].
     iInv "Hinv_noffer" as (stat') "[>(%γn_v' & %γn_o' & %Hγn' & Hγn_v' & #Hγn_o') Hstat']". encode_agree Hγn.
     iCombine "Hγn_o Hγn_o'" gives %<-%to_agree_op_inv_L. iClear "Hγn_o'".
     iDestruct (ghost_var_agree with "Hγn_v Hγn_v'") as %<-.
-    iMod (lc_fupd_elim_later with "Hlc Hstat'") as "AU_off". clear h2 xs2.
+    clear h2 xs2.
     iInv "Hinv_stack" as (h2 xs2) "(Hplist & >st.h↦ & >Hγs & (%offer_rep' & %offers' & >st.of↦ & Hio & >γof & Hoffers))".
-    iMod "AU_off" as (l) "[Hstack [_ Commit]]"; [solve [eauto 13 with ndisj]|].
+    (* CAS at state position succeeded *)
+    wp_apply (wp_cmpxchg_suc_offset with "n↦") as "n↦"; [by simplify_list_eq|done|by constructor|].
+    iMod "Hstat'" as (l) "[Hstack [_ Commit]]"; [solve [eauto 13 with ndisj]|].
     iDestruct "Hstack" as (γs' γof') "[%Hγ' Hγs']". encode_agree Hγ.
     iDestruct (ghost_var_agree with "Hγs Hγs'") as %<-.
     iMod (ghost_var_update_halves (x :: xs2) with "Hγs Hγs'") as "[Hγs Hγs']".

@@ -107,10 +107,9 @@ Module inf_Z.
     apply Z_lt_lt. lia.
   Qed.
 
-  Lemma lt_not_diag :
-    ∀ (n : inf_Z), ¬ (n < n)%inf_Z.
+  Global Instance lt_irreflexive : Irreflexive lt.
   Proof.
-    intros [|n|] LT; inversion LT.
+    intros [|n|] LT; try by inversion LT.
     apply lt_Z_lt in LT. lia.
   Qed.
 End inf_Z.

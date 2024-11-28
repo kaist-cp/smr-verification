@@ -4,9 +4,6 @@
 # Cannot use non-canonical projections as it causes massive unification failures
 # (https://github.com/coq/coq/issues/6294).
 -arg -w -arg -redundant-canonical-projection
-# Disabling warnings about future coercion syntax that requires Coq 8.17
-# (https://github.com/coq/coq/pull/16230)
--arg -w -arg -future-coercion-class-field
 
 
 # Modified version of heap_lang, with block memory model, tagging, and integers extended with infinity
@@ -110,6 +107,7 @@ theories/hazptr/code_rdcss.v
 theories/hazptr/code_cldeque.v
 theories/hazptr/code_harris_operations.v
 theories/hazptr/code_harris_michael_find.v
+theories/hazptr/code_harris_find.v
 
 ## Specs
 theories/hazptr/spec_hazptr.v
@@ -133,6 +131,7 @@ theories/hazptr/proof_rdcss.v
 theories/hazptr/proof_cldeque.v
 theories/hazptr/proof_harris_operations.v
 theories/hazptr/proof_harris_michael_find.v
+theories/hazptr/proof_harris_find.v
 
 theories/hazptr/closed_proofs.v
 theories/hazptr/client.v
@@ -186,22 +185,22 @@ theories/ebr/client.v
 
 
 ## Diaframe Basis
-theories/diaframe/lang/specs.v
-theories/diaframe/lang/proof_automation.v
-theories/diaframe/lang/base_hints.v
-theories/diaframe/lang/wp_auto_lob.v
-theories/diaframe/lang/atomic_specs.v
-theories/diaframe/lang/smr_weakestpre.v
-theories/diaframe/lang/smr_weakestpre_logatom.v
-theories/diaframe/lang/atom_spec_notation.v
+# theories/diaframe/lang/specs.v
+# theories/diaframe/lang/proof_automation.v
+# theories/diaframe/lang/base_hints.v
+# theories/diaframe/lang/wp_auto_lob.v
+# theories/diaframe/lang/atomic_specs.v
+# theories/diaframe/lang/smr_weakestpre.v
+# theories/diaframe/lang/smr_weakestpre_logatom.v
+# theories/diaframe/lang/atom_spec_notation.v
 
 ## Diaframe Hints
-theories/diaframe/hints/ghost_var_hints.v
-theories/diaframe/hints/array_hints.v
-theories/diaframe/hints/hazptr_hints.v
-theories/diaframe/hints/rcu_hints.v
+# theories/diaframe/hints/ghost_var_hints.v
+# theories/diaframe/hints/array_hints.v
+# theories/diaframe/hints/hazptr_hints.v
+# theories/diaframe/hints/rcu_hints.v
 
 ## Example: treiber stack on HP and RCU
-theories/diaframe/examples/proof_treiber_no_recl.v
-theories/diaframe/examples/proof_treiber_hazptr.v
-theories/diaframe/examples/proof_treiber_rcu.v
+# theories/diaframe/examples/proof_treiber_no_recl.v
+# theories/diaframe/examples/proof_treiber_hazptr.v
+# theories/diaframe/examples/proof_treiber_rcu.v

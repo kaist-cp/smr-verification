@@ -29,9 +29,9 @@ Context
 
 Definition slot_bag_acquire_slot_spec' : Prop :=
   ⊢ ∀ γsb (slotBag : loc) E,
-  <<< ∀∀ sbvmap slist, ▷ SlotBag γsb slotBag sbvmap slist >>>
+  <<{ ∀∀ sbvmap slist, ▷ SlotBag γsb slotBag sbvmap slist }>>
     slot_bag_acquire_slot #slotBag @ E,∅,∅
-  <<< ∃∃ slist' (slot : loc) (idx : nat),
+  <<{ ∃∃ slist' (slot : loc) (idx : nat),
         let sbvmap' := <[slot := (true, None)]> sbvmap in
         SlotBag γsb slotBag sbvmap' slist' ∗
         Slot γsb slot idx None ∗
@@ -40,8 +40,8 @@ Definition slot_bag_acquire_slot_spec' : Prop :=
             idx = length slist) ∨
           (slist' = slist ∧
             sbvmap !! slot = Some (false, None) ∧
-            slist !! idx = Some slot) ⌝,
-      RET #slot >>>.
+            slist !! idx = Some slot) ⌝ |
+      RET #slot }>>.
 
 Definition slot_bag_read_head_spec' : Prop :=
   ∀ γsb slotBag sbvmap slist E,
@@ -54,22 +54,22 @@ Definition slot_bag_read_head_spec' : Prop :=
 Definition slot_set_spec' : Prop :=
   ⊢ ∀ γsb (slotBag slot : loc) (idx : nat) (v' v : option blk) E,
   ▷ Slot γsb slot idx v' -∗
-  <<< ∀∀ sbvmap slist, ▷ SlotBag γsb slotBag sbvmap slist >>>
+  <<{ ∀∀ sbvmap slist, ▷ SlotBag γsb slotBag sbvmap slist }>>
     slot_set #slot #(oblk_to_lit v) @ E,∅,∅
-  <<< ⌜slist !! idx = Some slot ∧ sbvmap !! slot = Some (true, v')⌝ ∗
+  <<{ ⌜slist !! idx = Some slot ∧ sbvmap !! slot = Some (true, v')⌝ ∗
       SlotBag γsb slotBag (<[slot := (true, v)]> sbvmap) slist ∗
-      Slot γsb slot idx v,
-      RET #() >>>.
+      Slot γsb slot idx v |
+      RET #() }>>.
 
 Definition slot_unset_spec' : Prop :=
   ⊢ ∀ γsb (slotBag slot : loc) (idx : nat) (v : option blk) E,
   ▷ Slot γsb slot idx v -∗
-  <<< ∀∀ sbvmap slist, ▷ SlotBag γsb slotBag sbvmap slist >>>
+  <<{ ∀∀ sbvmap slist, ▷ SlotBag γsb slotBag sbvmap slist }>>
     slot_unset #slot @ E,∅,∅
-  <<< ⌜slist !! idx = Some slot ∧ sbvmap !! slot = Some (true, v)⌝ ∗
+  <<{ ⌜slist !! idx = Some slot ∧ sbvmap !! slot = Some (true, v)⌝ ∗
       SlotBag γsb slotBag (<[slot := (true, None)]> sbvmap) slist ∗
-      Slot γsb slot idx None,
-      RET #() >>>.
+      Slot γsb slot idx None |
+      RET #() }>>.
 
 Definition slot_bag_new_spec' : Prop :=
   ⊢ ∀ E,
@@ -80,11 +80,11 @@ Definition slot_bag_new_spec' : Prop :=
 Definition slot_drop_spec' : Prop :=
   ⊢ ∀ γsb (slotBag slot : loc) (idx : nat) E,
   ▷ Slot γsb slot idx None -∗
-  <<< ∀∀ sbvmap slist, ▷ SlotBag γsb slotBag sbvmap slist >>>
+  <<{ ∀∀ sbvmap slist, ▷ SlotBag γsb slotBag sbvmap slist }>>
     slot_drop #slot @ E,∅,∅
-  <<< ⌜slist !! idx = Some slot ∧ sbvmap !! slot = Some (true, None)⌝ ∗
+  <<{ ⌜slist !! idx = Some slot ∧ sbvmap !! slot = Some (true, None)⌝ ∗
       let sbvmap' := <[slot := (false, None)]> sbvmap in
-      SlotBag γsb slotBag sbvmap' slist, RET #() >>>.
+      SlotBag γsb slotBag sbvmap' slist | RET #() }>>.
 
 Definition slot_read_active_spec' : Prop :=
   ⊢ ∀ γsb sbvmap (slist : list loc) slotBag (slot : loc) idx E
@@ -145,13 +145,6 @@ Definition seq_bag_contains_spec' : Prop :=
   {{{ RET #(bool_decide (v ∈ vs));
       SeqBag seqBag vs }}}.
 
-Definition seq_bag_contains_other_spec' : Prop :=
-  ∀ seqBag vs (v : option blk) E,
-  {{{ SeqBag seqBag vs }}}
-      seq_bag_contains_other #seqBag #(oblk_to_lit v) @ E
-  {{{ v', RET #(bool_decide (v' ∈ vs ∧ v' ≠ v));
-      SeqBag seqBag vs }}}.
-
 End spec.
 
 Record slot_bag_spec {Σ} `{!heapGS Σ} : Type := SlotBagSpec {
@@ -182,7 +175,6 @@ Record slot_bag_spec {Σ} `{!heapGS Σ} : Type := SlotBagSpec {
   seq_bag_add_spec : seq_bag_add_spec' SeqBag;
 
   seq_bag_contains_spec : seq_bag_contains_spec' SeqBag;
-  seq_bag_contains_other_spec : seq_bag_contains_other_spec' SeqBag;
 }.
 
 Global Arguments slot_bag_spec _ {_}.

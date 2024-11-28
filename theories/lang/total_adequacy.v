@@ -28,5 +28,5 @@ Proof.
                           proph_map_interp κs σ.(used_proph_id) ∗
                           mono_nat_auth_own nγ 1 ns))%I.
   iExists id, (λ _, True%I), _.
-  iFrame. iExists ∅. by iFrame.
+  by iFrame.
 Qed.

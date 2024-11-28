@@ -8,7 +8,7 @@ From smr Require Import helpers.
 Notation Id := positive (only parsing).
 
 Inductive event :=
-  | link (i: Id) (offset: nat) (I: option Id)
+  | link (i: Id) (offset: nat) (J: option Id)
   | del (i: Id).
 
 Global Instance event_eq_dec : EqDecision event.
@@ -22,9 +22,6 @@ Definition event_id (e: event) : Id :=
 
 Implicit Types (H: list event) (i j: Id).
 
-Local Definition sub_history i H :=
-  filter (λ e, event_id e = i) H.
-
 Definition LiveAt H i := del i ∉ H.
 
 Local Hint Unfold LiveAt : core.
@@ -36,24 +33,24 @@ Proof. solve_decision. Defined.
 Local Definition interp H : gmap (Id * nat) Id :=
   fold_left (λ m e,
     match e with
-    | link i o (Some new) => <[(i, o) := new]>  m
+    | link i o (Some new) => <[(i, o) := new]> m
     | link i o None => delete (i, o)  m
     | _ => m
     end
   ) H ∅.
 
-(* TODO: Remove del_i_max_once. It is not needed. *)
-Local Definition del_i_max_once H: Prop :=
-  ∀ i (a b: nat), H !! a = Some (del i) → H !! b = Some (del i) → a = b.
+(* Not needed *)
+(* Local Definition del_i_max_once H: Prop := *)
+(*   ∀ i (a b: nat), H !! a = Some (del i) → H !! b = Some (del i) → a = b. *)
 
 Local Definition no_new_link_to_deleted H: Prop:=
   ∀ i j o (a b: nat), a < b → H !! a = Some (del j) → H !! b = Some (link i o (Some j)) → False.
 
-Local Definition living_points_to_livings H: Prop :=
+Local Definition live_points_to_live H: Prop :=
   ∀ i o j, (interp H) !! (i, o) = Some j → LiveAt H i → LiveAt H j.
 
 Local Definition well_formed H : Prop :=
-  del_i_max_once H ∧ no_new_link_to_deleted H ∧ living_points_to_livings H.
+  no_new_link_to_deleted H ∧ live_points_to_live H.
 
 Local Definition succ_hist_map H : gmap (Id * nat) (list (option Id)) :=
   fold_left (λ m e,
@@ -62,6 +59,9 @@ Local Definition succ_hist_map H : gmap (Id * nat) (list (option Id)) :=
     | del i => m
     end
   ) H ∅.
+
+Definition field_hist H i o : list (option Id) :=
+  default [] (succ_hist_map H !! (i, o)).
 
 Local Definition del_map_consistent H (del_map: gmap Id bool): Prop :=
   ∀ i,
@@ -82,7 +82,7 @@ Section history.
 
 Lemma unregistered_is_alive i H: i ∉ event_id <$> H → LiveAt H i.
 Proof.
-  intros. unfold LiveAt. set_unfold. intros del_i. apply H0. exists (del i). done.
+  intros NotIn. unfold LiveAt. set_unfold. intros del_i. apply NotIn. exists (del i). done.
 Qed.
 
 Lemma del_map_unaffected_by_links H H' appended del_map:
@@ -103,7 +103,7 @@ Proof.
   - done.
   - assert (i ∉ event_id <$> H' ∧ i ≠ event_id x) as [i_notin_H' i_notin_x] by set_solver.
     apply IH in i_notin_H'. unfold interp. rewrite fold_left_app. fold (interp H'). destruct x; simpl.
-    + destruct I; simpl in *.
+    + destruct J; simpl in *.
       * rewrite lookup_insert_ne; [done | congruence].
       * rewrite lookup_delete_ne; [done | congruence].
     + done.
@@ -121,7 +121,7 @@ Lemma succ_hist_update H i o Oj hist:
   (succ_hist_map H) !! (i, o) = Some hist →
   succ_hist_map (H ++ [link i o Oj]) = <[ (i, o) := hist ++ [Oj] ]> (succ_hist_map H).
 Proof.
-  intros. unfold succ_hist_map. rewrite fold_left_app. fold (succ_hist_map H). simpl. rewrite H0. done.
+  unfold succ_hist_map. rewrite fold_left_app. fold (succ_hist_map H). simpl. intros ->. done.
 Qed.
 
 Lemma succ_hist_unaffected_by_del H j:
@@ -133,7 +133,9 @@ Qed.
 Lemma succ_hist_create H i o Oj:
   (succ_hist_map H) !! (i, o) = None →
   succ_hist_map (H ++ [link i o Oj]) = <[ (i, o) := [Oj] ]> (succ_hist_map H).
-Proof. intros. unfold succ_hist_map. rewrite fold_left_app. fold (succ_hist_map H). simpl. rewrite H0. done. Qed.
+Proof.
+  unfold succ_hist_map. rewrite fold_left_app. fold (succ_hist_map H). simpl. intros ->. done.
+Qed.
 
 Lemma interp_unaffected_by_del H j:
   interp (H ++ [del j]) = interp H.
@@ -162,23 +164,58 @@ Lemma last_succ_hist_is_interp H i o sh oj:
   interp H !! (i, o) = oj.
 Proof.
   generalize dependent sh.
-  induction H as [| last_event H] using rev_ind; intros; [done|].
+  induction H as [| last_event H] using rev_ind; [done|].
 
-  unfold succ_hist_map in H0. rewrite fold_left_app in H0. fold (succ_hist_map H) in H0.
+  intros sh H_io H_last.
+  unfold succ_hist_map in H_io. rewrite fold_left_app in H_io. fold (succ_hist_map H) in H_io.
   unfold interp. rewrite fold_left_app. fold (interp H). simpl in *.
 
-  case (last_event) as [? | ?].
-  - destruct I as [new_j | ].
-    + case (decide ((i0, offset) = (i, o))) as [EQ | NE].
-      * inversion EQ. subst.
-        rewrite lookup_insert. rewrite lookup_insert in H0.
-        inversion H0. subst. rewrite last_app in H1. naive_solver.
-      * rewrite lookup_insert_ne; last done. rewrite lookup_insert_ne in H0; last done. naive_solver.
-    + case (decide ((i0, offset) = (i, o))) as [EQ | NE].
-      * inversion EQ. subst. rewrite lookup_delete. rewrite lookup_insert in H0.
-        inversion H0. subst sh. rewrite last_app in H1. naive_solver.
-      * rewrite lookup_delete_ne; last done. rewrite lookup_insert_ne in H0; last done. naive_solver.
-  - naive_solver.
+  case (last_event) as [i' o' J | ?].
+  - destruct J as [new_j | ].
+    + case (decide ((i', o') = (i, o))) as [[= -> ->] | NE].
+      * rewrite lookup_insert. rewrite lookup_insert in H_io.
+        injection H_io as <-. rewrite last_app in H_last. naive_solver.
+      * rewrite lookup_insert_ne; last done. rewrite lookup_insert_ne in H_io; last done. naive_solver.
+    + case (decide ((i', o') = (i, o))) as [[= -> ->] | NE].
+      * rewrite lookup_delete. rewrite lookup_insert in H_io.
+        injection H_io as <-. rewrite last_app in H_last. naive_solver.
+      * rewrite lookup_delete_ne; last done. rewrite lookup_insert_ne in H_io; last done. naive_solver.
+  - by eapply IHH.
+Qed.
+
+Lemma field_hist_lookup_not_in_prefix H Hstart i o n to :
+  Hstart `prefix_of` H →
+  (* Read something not in Hstart *)
+  length (field_hist Hstart i o) ≤ n →
+  field_hist H i o !! n = Some to →
+  ∃ b, H !! b = Some (link i o to) ∧ length Hstart ≤ b.
+Proof.
+  intros [rest ->] Seen_n.
+  induction rest as [|last_event rest] using rev_ind.
+  { rewrite app_nil_r. intros Hio_n. exfalso.
+    apply lookup_lt_Some in Hio_n. lia. }
+
+  rewrite app_assoc.
+  intros Hio_n.
+  rewrite /field_hist /succ_hist_map fold_left_app in Hio_n.
+  rewrite -/(succ_hist_map (Hstart ++ rest)) /= in Hio_n.
+  case last_event as [i' o' J | ?]; simpl in *; last first.
+  { (* del *)
+    rewrite -/(field_hist _ _ _) in Hio_n.
+    specialize (IHrest Hio_n) as [a [??]]. exists a.
+    split; [|done]. by apply lookup_app_l_Some. }
+
+  rewrite -/(field_hist _ _ _) in Hio_n.
+  case (decide ((i', o') = (i, o))) as [[= -> ->] | NE]; simpl in *.
+  - rewrite lookup_insert /= in Hio_n.
+    apply lookup_snoc_Some in Hio_n as [[? Hio_n] | [? ->]].
+    + specialize (IHrest Hio_n) as [a [??]]. exists a.
+      split; [|done]. by apply lookup_app_l_Some.
+    + exists (length (Hstart ++ rest)). rewrite snoc_lookup. split; [done|].
+      rewrite app_length. lia.
+  - rewrite lookup_insert_ne in Hio_n; last done.
+    specialize (IHrest Hio_n) as [a [??]]. exists a.
+    split; [|done]. by apply lookup_app_l_Some.
 Qed.
 
 Lemma pred_in_pred_multiset H π i o j:
@@ -195,17 +232,16 @@ Proof.
   rewrite elem_of_list_to_set_disj. set_unfold. exists (i, o). rewrite gmultiset_elem_of_elements. done.
 Qed.
 
-Lemma mono_succ_hist_map H1 H2 h1 io:
+Lemma succ_hist_map_lookup_prefix H1 H2 h1 io:
   H1 `prefix_of` H2 →
   succ_hist_map H1 !! io = Some h1 →
   ∃ h2, succ_hist_map H2 !! io = Some h2 ∧ h1 `prefix_of` h2.
 Proof.
-  intros.
-  rewrite prefix_cut in H. remember (drop (length H1) H2) as appended. clear Heqappended. subst H2.
-  induction appended using rev_ind.
+  intros [rest ->] Hh1.
+  induction rest using rev_ind.
   - rewrite app_nil_r. eexists. done.
-  - rewrite app_assoc. remember (H1 ++ appended) as H1'. clear HeqH1'. unfold succ_hist_map. rewrite fold_left_app. fold (succ_hist_map H1').
-    destruct IHappended as (h2' & ? & ?).
+  - rewrite app_assoc. remember (H1 ++ rest) as H1'. clear HeqH1'. unfold succ_hist_map. rewrite fold_left_app. fold (succ_hist_map H1').
+    destruct IHrest as (h2' & ? & ?).
     destruct x; simpl.
     + case (decide ((i, offset) = io)) as [-> | NE].
       * rewrite lookup_insert. eexists. split; try done. rewrite H. simpl. apply prefix_app_r. done.
@@ -213,13 +249,44 @@ Proof.
     + eauto.
 Qed.
 
+Lemma succ_hist_map_prefix_mono H1 H2 h1 h2 io:
+  H1 `prefix_of` H2 →
+  succ_hist_map H1 !!! io = h1 →
+  succ_hist_map H2 !!! io = h2 →
+  h1 `prefix_of` h2.
+Proof.
+  intros [rest ->] Hh1. move: h2.
+  induction rest as [|e ?] using rev_ind.
+  - intros h2. rewrite app_nil_r. subst. exists []. rewrite app_nil_r. done.
+  - intros h2. rewrite app_assoc. remember (H1 ++ rest) as H1'.
+    rewrite /succ_hist_map fold_left_app. fold (succ_hist_map H1').
+    destruct e; simpl.
+    + case (decide ((i, offset) = io)) as [-> | NE].
+      * rewrite lookup_total_insert. intros <-.
+        apply prefix_app_r. apply IHrest. done.
+      * intros <-. rewrite lookup_total_insert_ne; last done. apply IHrest. done.
+    + intros. apply IHrest. done.
+Qed.
+
+Lemma field_hist_prefix_lookup_Some H Hlink i o n to :
+  Hlink `prefix_of` H →
+  field_hist Hlink i o !! n = Some to →
+  field_hist H i o !! n = Some to.
+Proof.
+  intros PF. rewrite /field_hist.
+  destruct (succ_hist_map Hlink !! (i, o)) as [Hlink_io|] eqn:Eqn_Hlink_io; [simpl|done].
+  specialize (succ_hist_map_lookup_prefix _ _ _ _ PF Eqn_Hlink_io) as (H_io & -> & PF_io). simpl.
+  intros Hlink_io_n.
+  by apply (prefix_lookup_Some _ _ _ _ Hlink_io_n PF_io).
+Qed.
+
 End history.
 
 Class node_link_historyG Σ := NodeLinkHistoryG {
-  node_link_history_historyG :> mono_listG event Σ;
-  node_link_history_successorG :> ghost_mapG Σ (positive * nat) (list (option positive));
-  node_link_history_predecessorG :> ghost_mapG Σ positive (gmultiset positive);
-  node_link_history_deletedG :> ghost_mapG Σ positive bool;
+  #[local] node_link_history_historyG :: mono_listG event Σ;
+  #[local] node_link_history_successorG :: ghost_mapG Σ (positive * nat) (list (option positive));
+  #[local] node_link_history_predecessorG :: ghost_mapG Σ positive (gmultiset positive);
+  #[local] node_link_history_deletedG :: ghost_mapG Σ positive bool;
 }.
 
 Definition node_link_historyΣ : gFunctors :=
@@ -260,12 +327,31 @@ Definition HistSnap H : iProp :=
   ⌜ well_formed H ⌝ ∗
   mono_list_lb_own γh H.
 
-Definition HistPointsTo i o oj: iProp :=
+Definition HistPointsTo (i: Id) (o: nat) (Hio: list (option Id)): iProp :=
+  ∃ γh γt γb γd Hlink,
+  ⌜ γ = encode (γh, γt, γb, γd) ⌝ ∗
+  ⌜ Hio = field_hist Hlink i o ⌝ ∗
+  mono_list_lb_own γh Hlink ∗
+  (i, o) ↪[γt] Hio.
+
+Definition HistPointsToLast i o oj: iProp :=
   ∃ γh γt γb γd Hlink,
   ⌜ γ = encode (γh, γt, γb, γd) ⌝ ∗
   ⌜ last Hlink = Some (link i o oj) ⌝ ∗
   mono_list_lb_own γh Hlink ∗
   (i, o) ↪[γt] ((succ_hist_map Hlink) !!! (i, o)).
+(*
+Definition HistPointsToLast i o oj: iProp :=
+  ∃ Hio,
+    ⌜ last Hio = Some oj ⌝ ∗
+    HistPointsTo i o Hio.
+*)
+
+Definition HistPointedTo (i: Id) (o: nat) (n : nat) (to : option Id): iProp :=
+  ∃ γh γt γb γd Hlink,
+  ⌜ γ = encode (γh, γt, γb, γd) ⌝ ∗
+  ⌜ field_hist Hlink i o !! n = Some to ⌝ ∗
+  mono_list_lb_own γh Hlink.
 
 Definition HistPointedBy j (B: gmultiset Id): iProp :=
   ∃ γh γt γb γd,
@@ -276,8 +362,8 @@ Definition HistPointedBy j (B: gmultiset Id): iProp :=
 Definition HistDeleted j: iProp :=
   ∃ γh γt γb γd,
   ⌜ γ = encode (γh, γt, γb, γd) ⌝ ∗
-  j ↪[γb] ∅ ∗
-  j ↪[γd] true.
+  j ↪[γb]□ ∅ ∗
+  j ↪[γd]□ true.
 
 
 (** ** helper lemmas *)
@@ -285,21 +371,29 @@ Definition HistDeleted j: iProp :=
 Ltac exfr := repeat (repeat iExists _; iFrame "∗#%").
 
 Global Instance HistAuth_timeless H : Timeless (HistAuth H).
-Proof. apply _. Qed.
+Proof. repeat apply bi.exist_timeless. apply _. Qed.
 Global Instance HistSnap_timeless H : Timeless (HistSnap H).
-Proof. apply _. Qed.
-Global Instance HistAuth_persistent H : Persistent (HistSnap H).
-Proof. apply _. Qed.
-Global Instance HistPointsTo_timeless i o oj : Timeless (HistPointsTo i o oj).
-Proof. apply _. Qed.
+Proof. repeat apply bi.exist_timeless. apply _. Qed.
+Global Instance HistSnap_persistent H : Persistent (HistSnap H).
+Proof. repeat apply bi.exist_persistent. apply _. Qed.
+Global Instance HistPointsTo_timeless i o oj : Timeless (HistPointsToLast i o oj).
+Proof. repeat apply bi.exist_timeless. apply _. Qed.
+Global Instance HistPointsTo'_timeless i o Hio : Timeless (HistPointsTo i o Hio).
+Proof. repeat apply bi.exist_timeless. apply _. Qed.
+Global Instance HistPointsToSnap_timeless i o n to : Timeless (HistPointedTo i o n to).
+Proof. repeat apply bi.exist_timeless. apply _. Qed.
+Global Instance HistPointsToSnap_persistent i o n to : Persistent (HistPointedTo i o n to).
+Proof. repeat apply bi.exist_persistent. apply _. Qed.
 Global Instance HistPointedBy_timeless j B : Timeless (HistPointedBy j B).
-Proof. apply _. Qed.
+Proof. repeat apply bi.exist_timeless. apply _. Qed.
+Global Instance HistDeleted_Persistent j : Persistent (HistDeleted j).
+Proof. repeat apply bi.exist_persistent. apply _. Qed.
 Global Instance HistDeleted_timeless j : Timeless (HistDeleted j).
-Proof. apply _. Qed.
+Proof. repeat apply bi.exist_timeless. apply _. Qed.
 
 Local Lemma PointsTo_reflects_interp H i o oj:
   HistAuth H -∗
-  HistPointsTo i o oj -∗
+  HistPointsToLast i o oj -∗
   ⌜ interp H !! (i, o) = oj ⌝.
 Proof.
   iIntros "HistAuth PointsTo".
@@ -324,9 +418,9 @@ Local Lemma remove_deleted_from_PointedBy i j H B π γh γt γb γd:
   ghost_map_auth γb 1 (to_pred_multiset_map π) -∗
   HistPointedBy j B ==∗
 
-  ∃ πj o', ⌜ π !! j = Some πj ⌝ ∗
-    ⌜ (i, o') ∈ πj ⌝ ∗
-    ghost_map_auth γb 1 (to_pred_multiset_map (<[ j:= (πj ∖ {[+ (i, o') +]}) ]> π)) ∗
+  ∃ πj o, ⌜ π !! j = Some πj ⌝ ∗
+    ⌜ (i, o) ∈ πj ⌝ ∗
+    ghost_map_auth γb 1 (to_pred_multiset_map (<[ j:= (πj ∖ {[+ (i, o) +]}) ]> π)) ∗
     HistPointedBy j (B ∖ {[+ i +]}).
 Proof.
   iIntros (Enc i_in_B pred_map_consistent i_not_alive) "●pred_multiset PointedBy".
@@ -342,7 +436,7 @@ Proof.
 
   iMod (ghost_map_update (B ∖ {[+ i +]}) with "●pred_multiset ◯pred_j") as "[●pred_multiset' ◯pred_j']".
 
-  assert (∃ o, (i, o) ∈ πj) as [o' io'_in_πj]. {
+  assert (∃ o, (i, o) ∈ πj) as [o io_in_πj]. {
     clear -Eqn_B i_in_B. subst B. induction πj using gmultiset_ind.
     - rewrite gmultiset_elements_empty in i_in_B. set_solver.
     - rewrite gmultiset_elements_disj_union in i_in_B. rewrite fmap_app in i_in_B.
@@ -353,8 +447,8 @@ Proof.
       + specialize (IHπj H) as [o ?]. exists o. multiset_solver.
   }
 
-  remember (πj ∖ {[+ (i, o') +]}) as πj'.
-  assert (πj = {[+ (i, o') +]} ⊎ πj') as πj_πj'. { subst πj'. by eapply gmultiset_disj_union_difference'. }
+  remember (πj ∖ {[+ (i, o) +]}) as πj'.
+  assert (πj = {[+ (i, o) +]} ⊎ πj') as πj_πj'. { subst πj'. by eapply gmultiset_disj_union_difference'. }
   remember (<[ j := πj' ]> π) as π'.
 
   assert (<[j:=B ∖ {[+ i +]}]> (to_pred_multiset_map π) = to_pred_multiset_map π') as ->. {
@@ -363,73 +457,139 @@ Proof.
     rewrite gmultiset_elements_singleton. multiset_solver.
   }
   subst π' πj'.
-  exfr. iModIntro. iSplit; try done. exfr.
+  exfr. done.
 Qed.
 
 
 (** ** rules *)
 
-Lemma hist_optimistic_traversal i o j H H_curr :
-  LiveAt H i →
-  HistAuth H_curr -∗ HistSnap H -∗ HistPointsTo i o (Some j) -∗ ⌜ LiveAt H j ⌝.
+Lemma hist_optimistic_traversal i o j Hstart Hcurr :
+  LiveAt Hstart i →
+  HistAuth Hcurr -∗ HistSnap Hstart -∗ HistPointsToLast i o (Some j) -∗ ⌜ LiveAt Hstart j ⌝.
 Proof.
   iIntros (i_liveat_H) "HistAuth Snap PointsTo".
   iDestruct "HistAuth" as (??????) "(%Enc & _ & _ & %well_formed_Hcurr &
-    ●H_curr & ●succ_hist & _ & _)".
-  iDestruct "Snap" as (?????) "[%well_formed_H ◯H]". encode_agree Enc.
+    ●Hcurr & ●succ_hist & _ & _)".
+  iDestruct "Snap" as (?????) "[%well_formed_H ◯Hstart]". encode_agree Enc.
   iDestruct "PointsTo" as (??????) "(%Hlink_last & ◯Hlink & ◯succ_hist_io)". encode_agree Enc.
-  iDestruct (mono_list_auth_lb_valid with "●H_curr ◯Hlink") as "[% %Hlink_before_Hcurr]".
-  iDestruct (mono_list_auth_lb_valid with "●H_curr ◯H") as "[% %H_before_Hcurr]".
-  iDestruct (mono_list_lb_valid with "◯H ◯Hlink") as "[%H_before_Hlink | %Hlink_before_H]".
-  -
-    assert (LiveAt Hlink j). {
-      destruct well_formed_Hcurr as (_ & nnltd & _). unfold no_new_link_to_deleted in *.
+  iDestruct (mono_list_auth_lb_valid with "●Hcurr ◯Hlink") as %[_ Hlink_before_Hcurr].
+  iDestruct (mono_list_auth_lb_valid with "●Hcurr ◯Hstart") as %[_ Hstart_before_Hcurr].
+  iDestruct (mono_list_lb_valid with "◯Hstart ◯Hlink") as %[Hstart_before_Hlink | Hlink_before_Hstart].
 
-      assert (∀ a, Hlink !! a = Some (del j) → False). {
-        intros ? lookup_Ha.
-        rewrite last_lookup in Hlink_last. replace (Init.Nat.pred (length Hlink)) with ((length Hlink) - 1) in *; last lia.
-        assert (a < length Hlink - 1) as a_lt_length_Hlink_m1. {
-          remember (lookup_lt_Some _ _ _ lookup_Ha).
-          specialize (prefix_length _ _ H_before_Hlink) as ?.
-          assert (a ≠ (length Hlink - 1)) by naive_solver. lia.
-        }
-        eapply nnltd.
-        - exact a_lt_length_Hlink_m1.
-        - eapply (prefix_lookup_Some Hlink); done.
-        - eapply (prefix_lookup_Some Hlink); done.
-      }
-      unfold LiveAt in *. intros contr. rewrite elem_of_list_lookup in contr. naive_solver.
+  - iPureIntro.
+    assert (LiveAt Hlink j); last by eauto using (elem_of_prefix _ _ _ _ Hstart_before_Hlink).
+    assert (∀ a, Hlink !! a = Some (del j) → False); last first.
+    { unfold LiveAt in *. rewrite elem_of_list_lookup. naive_solver. }
+    intros a lookup_Ha. rewrite last_lookup in Hlink_last.
+    replace (Init.Nat.pred (length Hlink)) with ((length Hlink) - 1) in *; last lia.
+    assert (a < length Hlink - 1) as a_lt_length_Hlink_m1. {
+      assert (a ≠ length Hlink - 1) by congruence.
+      have ? := lookup_lt_Some _ _ _ lookup_Ha. lia.
     }
-    iPureIntro. unfold LiveAt in *. eauto using elem_of_prefix.
-  -
-    iDestruct (ghost_map_lookup with "●succ_hist ◯succ_hist_io") as "%shm_constant".
+    destruct well_formed_Hcurr as (nnltd & _). unfold no_new_link_to_deleted in nnltd.
+    eapply nnltd.
+    + exact a_lt_length_Hlink_m1.
+    + eapply (prefix_lookup_Some Hlink); done.
+    + eapply (prefix_lookup_Some Hlink); done.
+
+  - iDestruct (ghost_map_lookup with "●succ_hist ◯succ_hist_io") as "%Eqn_Hcurr_io".
     iPureIntro.
-    assert (∃ shm_io, succ_hist_map Hlink !! (i, o) = Some shm_io ∧ last shm_io = Some (Some j)) as (shm_io & Eqn_shm_io & last_shm_io). {
+    assert (∃ Hlink_io, succ_hist_map Hlink !! (i, o) = Some Hlink_io ∧ last Hlink_io = Some (Some j))
+      as (Hlink_io & Eqn_Hlink_io & last_Hlink_io).
+    {
       rewrite last_Some in Hlink_last. destruct Hlink_last as [Hlink' e]. subst Hlink.
-      unfold succ_hist_map. rewrite fold_left_app. fold (succ_hist_map Hlink'). simpl.  rewrite lookup_insert. eexists. split; try done. rewrite last_app. done.
+      unfold succ_hist_map. rewrite fold_left_app. fold (succ_hist_map Hlink'). simpl.
+      eexists. rewrite lookup_insert. split; try done. rewrite last_app. done.
     }
-    rewrite -lookup_lookup_total in shm_constant; last done.
-    rewrite Eqn_shm_io in shm_constant.
+    rewrite -lookup_lookup_total in Eqn_Hcurr_io; last done.
+    rewrite Eqn_Hlink_io in Eqn_Hcurr_io.
 
-    assert (succ_hist_map H !! (i, o) = Some shm_io). {
-      specialize (mono_succ_hist_map _ _ _ _ Hlink_before_H Eqn_shm_io) as (shm_H_io & Eqn_shm_H_io & shm_io_po_H).
-      specialize (mono_succ_hist_map _ _ _ _ H_before_Hcurr Eqn_shm_H_io) as (shm_io' & ? & ?).
-      assert (shm_io = shm_io') as <- by congruence.
-      assert (length shm_H_io = length shm_io). {
-        assert (length shm_H_io ≤ length shm_io); first by apply prefix_length.
-        assert (length shm_io ≤ length shm_H_io); first by apply prefix_length.
-        lia.
-      }
-      assert (shm_io = shm_H_io) as <-; first by apply prefix_length_eq.
+    assert (succ_hist_map Hstart !! (i, o) = Some Hlink_io). {
+      specialize (succ_hist_map_lookup_prefix _ _ _ _ Hlink_before_Hstart Eqn_Hlink_io)
+        as (Hstart_io & Eqn_Hstart_io & Hlink_io_po_Hstart_io).
+      specialize (succ_hist_map_lookup_prefix _ _ _ _ Hstart_before_Hcurr Eqn_Hstart_io)
+        as (Hcurr_io & Eqn_Hcurr_io' & Hstart_io_po_Hcurr_io).
+      assert (Hlink_io = Hcurr_io) as <- by congruence. clear Eqn_Hcurr_io'.
+      assert (Hlink_io = Hstart_io) as <- by by apply (anti_symm prefix).
       done.
     }
-    assert (interp H !! (i, o) = Some j) as io_points_to_j; first by eapply last_succ_hist_is_interp.
+    assert (interp Hstart !! (i, o) = Some j) as io_points_to_j; first by eapply last_succ_hist_is_interp.
 
-    destruct well_formed_H as (_ & _ & lptl).
-    unfold living_points_to_livings in lptl.
+    destruct well_formed_H as (_ & lptl).
+    unfold live_points_to_live in lptl.
     eapply lptl; done.
 Qed.
 
+Lemma HistPointsTo_snap i o Hio n to :
+  Hio !! n = Some to → HistPointsTo i o Hio -∗ HistPointedTo i o n to.
+Proof.
+  iIntros (Hio_n) "PointsTo".
+  iDestruct "PointsTo" as (??????) "(%Hio_def & ◯Hlink & ◯succ_hist_io)".
+  iFrame "∗%". iPureIntro. congruence.
+Qed.
+
+Lemma hist_optimistic_traversal' i o n j Hstart Hcurr :
+  LiveAt Hstart i →
+  (* read was done with the observation of Hstart *)
+  length (field_hist Hstart i o) - 1 ≤ n →
+  HistAuth Hcurr -∗
+  HistSnap Hstart -∗
+  (* read n-th event from (i,o) *)
+  HistPointedTo i o n (Some j) -∗
+  ⌜ LiveAt Hstart j ⌝.
+Proof.
+  iIntros (Hstart_i Hstart_io_len_n) "HistAuth Snap PointsTo".
+  iDestruct "HistAuth" as (??????) "(%Enc & _ & _ & %well_formed_Hcurr &
+    ●Hcurr & ●succ_hist & _ & _)".
+  iDestruct "Snap" as (?????) "[%well_formed_Hstart ◯Hstart]". encode_agree Enc.
+  iDestruct "PointsTo" as (???? Hlink ?) "(%Hlink_io_n & ◯Hlink)". encode_agree Enc.
+  iDestruct (mono_list_auth_lb_valid with "●Hcurr ◯Hlink") as %[_ Hlink_before_Hcurr].
+  iDestruct (mono_list_auth_lb_valid with "●Hcurr ◯Hstart") as %[_ H_before_Hcurr].
+  iDestruct (mono_list_lb_valid with "◯Hstart ◯Hlink") as %Hstart_Hlink.
+  remember (field_hist Hstart i o) as Hstart_io eqn:Hstart_io_def.
+  remember (field_hist Hlink i o) as Hlink_io eqn:Hlink_io_def.
+
+  (* Assume j is dead in Hstart *)
+  iPureIntro. intros Hstart_j.
+
+  (* by the two assumptions on n, Hstart_io can't be longer than Hlink_io *)
+  have {Hstart_Hlink}Hstart_Hio : Hstart_io `prefix_of` Hlink_io.
+  { have Hstart_Hio : Hstart_io `prefix_of` Hlink_io ∨ Hlink_io `prefix_of` Hstart_io.
+    { destruct Hstart_Hlink as [PF|PF]; [left|right]; by eapply succ_hist_map_prefix_mono. }
+    destruct Hstart_Hio as [?|PF]; first done.
+    case (decide (Hlink_io = Hstart_io)) as [->|NE]; first done.
+    assert (length Hlink_io ≠ length Hstart_io) by auto using prefix_length_eq.
+    apply prefix_length in PF. apply lookup_lt_Some in Hlink_io_n. lia. }
+
+  (* n can't be newer than the events in in Hstart_io, because of no_new_link_to_deleted *)
+  have n_Hstart_io : n < length Hstart_io.
+  { destruct well_formed_Hcurr as [nnltd _]. unfold no_new_link_to_deleted in nnltd.
+    apply Nat.lt_nge => {}Hstart_io_len_n.
+    (* From [del j ∈ Hstart], get [∃ a, Hstart !! a = Some (del j)] *)
+    apply elem_of_list_lookup in Hstart_j. destruct Hstart_j as [a Hstart_j].
+    (* From [Hlink_io !! n = Some (Some j)], get [∃ b, Hlink !! b = Some (link i o (Some j))] *)
+    (* From [length Hstart_io ≤ n], get [length Hstart ≤ b]. Since [a < length Hstart], [a < b]. *)
+    opose proof (field_hist_lookup_not_in_prefix Hcurr Hstart i o n (Some j) H_before_Hcurr _ _) as Hb.
+    { subst Hstart_io. done. }
+    { subst. eapply (field_hist_prefix_lookup_Some _ Hlink _ _ _ _ Hlink_before_Hcurr). done. }
+    destruct Hb as (b & Hcurr_b & Hstart_b).
+    refine (nnltd _ _ _ a b _ _ Hcurr_b).
+    - apply lookup_lt_Some in Hstart_j. lia.
+    - by eapply prefix_lookup_Some. }
+  (* combined with the precondition, it follows that n is the last event in Hstart_io *)
+  have {n_Hstart_io Hstart_io_len_n} [Hstart_io_len_n Hstart_io_NE] :
+    n = length Hstart_io - 1 ∧ length Hstart_io > 0 by lia.
+  have {Hstart_io_NE}Hstart_io_n : Hstart_io !! n = Some (Some j).
+  { rewrite (prefix_lookup_lt Hstart_io Hlink_io n ltac:(lia) Hstart_Hio). done. }
+
+  (* by live_points_to_live in Hstart, j must be live in Hstart *)
+  destruct well_formed_Hstart as [_ lptl]. unfold live_points_to_live in lptl.
+  eapply lptl; [|done..].
+  eapply (last_succ_hist_is_interp _ _ o Hstart_io).
+  - rewrite /field_hist in Hstart_io_def.
+    destruct (succ_hist_map Hstart !! (i, o)) eqn:?; by simplify_eq/=.
+  - rewrite last_lookup. rewrite -Nat.sub_1_r. congruence.
+Qed.
 
 Lemma hist_take_snapshot H:
   HistAuth H -∗ HistSnap H.
@@ -440,7 +600,6 @@ Proof.
   iDestruct (mono_list_lb_own_get with "●H") as "◯H".
   by iFrame.
 Qed.
-
 
 Lemma hist_auth_snap_valid H1 H2:
   HistAuth H1 -∗ HistSnap H2 -∗ ⌜ H2 `prefix_of` H1 ⌝.
@@ -453,7 +612,7 @@ Qed.
 
 
 Lemma hist_pointsto_is_registered H i o oj:
-  HistAuth H -∗ HistPointsTo i o oj -∗ ⌜ i ∈ event_id <$> H ⌝.
+  HistAuth H -∗ HistPointsToLast i o oj -∗ ⌜ i ∈ event_id <$> H ⌝.
 Proof.
   (* NOTE: this can also be proved using 'unregistered_has_no_succ_hist' *)
   iIntros "Auth PointsTo".
@@ -494,7 +653,7 @@ Qed.
 Lemma hist_deleted_is_not_alive H j:
   HistAuth H -∗ HistDeleted j -∗ ⌜ ¬ LiveAt H j ⌝.
 Proof.
-  iIntros "Auth Deleted".
+  iIntros "Auth #Deleted".
   iDestruct "Auth" as (??????) "(%Enc & %del_map_consistent_b & _ & _ & _ & _ & _ & ●del_map)".
   iDestruct "Deleted" as (?????) "[_ ◯del_map_j]". encode_agree Enc.
 
@@ -506,7 +665,7 @@ Lemma hist_create_node (H: list event) (size: nat) i:
   i ∉ event_id <$> H →
   HistAuth H ==∗
   HistAuth (H ++  ((λ o, link i o None) <$> (seq 0 size)) ) ∗ HistPointedBy i ∅ ∗
-  ([∗ list] o ∈ seq 0 size, HistPointsTo i o None).
+  ([∗ list] o ∈ seq 0 size, HistPointsToLast i o None).
 Proof.
   rename i into new_i.
   iIntros (size_not_0 new_i_is_new) "HistAuth".
@@ -518,7 +677,7 @@ Proof.
 
   (* helpers *)
   assert (∃ sm1, S sm1 = size) as [sm1 HeqSm1]; first by exists (size - 1); lia.
-  assert (new_i ∈ event_id <$> H'). {
+  assert (new_i ∈ event_id <$> H') as H'_new_i. {
     simpl in HeqH'. set_unfold. exists (link new_i 0 None). set_solver.
   }
 
@@ -546,7 +705,7 @@ Proof.
   }
   remember (<[ new_i := ∅ ]> π) as π'.
 
-  assert (new_i ∉ dom π). {
+  assert (new_i ∉ dom π) as H_π_new_i. {
     destruct pred_map_consistent_before as (pmc1 & _). auto.
   }
 
@@ -554,7 +713,7 @@ Proof.
     unfold pred_map_consistent. destruct pred_map_consistent_before as (pmc1 & pmc2). split.
     - subst π'. intros. case (decide (j = new_i)) as [-> | NE_new_i]; try done. set_solver.
     - intros ??? Hinterp ?. case (decide (i = new_i)) as [-> | NE_new_i].
-      + exfalso. assert (interp H' !! (new_i, o) = None); last congruence. clear H1. rewrite HeqH'.
+      + exfalso. assert (interp H' !! (new_i, o) = None); last congruence. clear H_π_new_i. rewrite HeqH'.
         unfold interp. rewrite fold_left_app. fold (interp H).
         assert (interp H !! (new_i, o) = None) as interp_H_new_i_None; first by apply unregistered_points_to_nowhere.
         clear -interp_H_new_i_None. induction size as [| s']; first done. replace (S s') with (s' + 1); last lia.
@@ -588,11 +747,11 @@ Proof.
   (* These have to be done together because the output HistPointsTos contain snapshots of ●H's intermediate steps *)
   iAssert (|==> mono_list_auth_own γh 1 H' ∗
             ghost_map_auth γt 1 (succ_hist_map H') ∗
-            ([∗ list] o ∈ seq 0 size, HistPointsTo new_i o None) ∗
+            ([∗ list] o ∈ seq 0 size, HistPointsToLast new_i o None) ∗
              ⌜ ∀ s, size ≤ s → succ_hist_map H' !! (new_i, s) = None ⌝ (* to put more information in IH*)
           )%I
         with "[●succ_hist ●H]" as ">(●H' & succ_hist' & $ & _)". {
-    subst H'. clear -new_i_is_new Enc. iInduction size as [|s'] "IH".
+    subst H'. clear -new_i_is_new Enc. iInduction size as [|s' IH].
     - simpl. rewrite app_nil_r. iFrame. iPureIntro. split; try done. intros.
       apply not_elem_of_dom. apply unregistered_has_no_succ_hist. done.
     - iSpecialize ("IH" with "●succ_hist ●H"). iDestruct "IH" as ">(●H & ●shm & hpts & %ns_new)". replace (S s') with (s' + 1); last lia.
@@ -601,9 +760,9 @@ Proof.
       iFrame. simpl. remember ((H ++ ((λ o : nat, link new_i o None) <$> seq 0 s'))) as H_prev.
       iMod (mono_list_auth_own_update (H_prev ++ [link new_i s' None]) with "●H") as "[●H' ◯H']"; first by eexists.
       iModIntro. iFrame. iSplitL.
-      + iSplit; auto. unfold HistPointsTo. exfr. rewrite succ_hist_create; last by auto.
+      + exfr. rewrite succ_hist_create; last by auto.
         rewrite last_app. simpl. iSplit; try done. rewrite lookup_total_insert. done.
-      + iPureIntro. intros. rewrite lookup_insert_ne; last by inversion 1; lia. apply ns_new. lia.
+      + iPureIntro. intros. rewrite lookup_insert_ne; last by injection 1; lia. apply ns_new. lia.
   }
 
   unfold HistAuth. exfr.
@@ -611,22 +770,20 @@ Proof.
   (* prove well-formedness *)
 
   iPureIntro. unfold well_formed in *. subst H'. clear -well_formed_before.
-  remember ((λ o : nat, link new_i o None) <$> seq 0 size) as appended. destruct well_formed_before as (wfp1 & wfp2 & wfp3).
+  remember ((λ o : nat, link new_i o None) <$> seq 0 size) as appended. destruct well_formed_before as (wfp2 & wfp3).
   assert (∀ i, del i ∉ appended) by set_solver.
   assert (∀ i j o, link i o (Some j) ∉ appended) by set_solver.
   repeat split.
-  - unfold del_i_max_once in *. intros.
-    repeat rewrite lookup_app_Some in H2 H3. naive_solver (eauto using elem_of_list_lookup_2).
-  - unfold no_new_link_to_deleted in *. intros.
-    repeat rewrite lookup_app_Some in H3 H4.
+  - unfold no_new_link_to_deleted in *. intros i j o a b Hab Ha Hb.
+    repeat rewrite lookup_app_Some in Ha Hb.
     naive_solver (eauto using elem_of_list_lookup_2).
-  - unfold living_points_to_livings, LiveAt in *. intros.
+  - unfold live_points_to_live, LiveAt in *. intros i o j H_ij H_i.
     assert (interp H !! (i, o) = Some j). {
-      subst appended. clear -H2. induction size as [| s'].
-      - simpl in *. rewrite app_nil_r in H2. done.
+      subst appended. clear -H_ij. induction size as [| s'].
+      - simpl in *. rewrite app_nil_r in H_ij. done.
       - remember (H ++ ((λ o : nat, link new_i o None) <$> seq 0 s')) as Hb. apply IHs'.
-        replace (S s') with (s' + 1) in H2; last lia. unfold interp in H2.
-        rewrite seq_app fmap_app app_assoc fold_left_app -HeqHb in H2. fold (interp Hb) in H2. simpl in *.
+        replace (S s') with (s' + 1) in H_ij; last lia. unfold interp in H_ij.
+        rewrite seq_app fmap_app app_assoc fold_left_app -HeqHb in H_ij. fold (interp Hb) in H_ij. simpl in *.
         by eapply lookup_delete_Some.
     }
     set_solver.
@@ -649,7 +806,7 @@ Proof.
 
   (* destruct HistPointdBy *)
   iDestruct "PointedBy" as (????) "(% & ◯i_pointed_by_∅ & ◯i_not_deleted)". encode_agree Enc.
-
+  iMod (ghost_map_elem_persist with "◯i_pointed_by_∅") as "#◯i_pointed_by_∅".
 
   (* rj was not deleted before. *)
   iAssert (⌜ LiveAt H rj ⌝ )%I with "[◯i_not_deleted ●del_map]"  as "%rj_LiveAt_H". {
@@ -658,15 +815,15 @@ Proof.
 
   iAssert (⌜ ¬ ∃ i o, (interp H) !! (i, o) = Some rj ∧ LiveAt H i ⌝)%I as "%rj_has_no_predecessor". {
     iDestruct (ghost_map_lookup with "●pred_multiset ◯i_pointed_by_∅") as"%".
-    iPureIntro. intros (i & o & ? & ?).
+    iPureIntro. intros (i & o & H_irj & H_i).
 
-    specialize (pred_in_pred_multiset _ _ _ _ _ pred_map_consistent_before H1 H2) as (pmm & ? & ?).
+    specialize (pred_in_pred_multiset _ _ _ _ _ pred_map_consistent_before H_irj H_i) as (pmm & ? & ?).
     assert (pmm = ∅) as -> by naive_solver. (* i ∈ ∅ → False *) set_solver.
   }
 
-
   (* update (del_map !! i) to true. *)
   iMod (ghost_map_update true with "●del_map ◯i_not_deleted") as "[●del_map' ◯i_deleted]".
+  iMod (ghost_map_elem_persist with "◯i_deleted") as "#◯i_deleted".
   remember ((<[rj:=true]> del_map)) as del_map'.
 
   assert (del_map_consistent H' del_map'). {
@@ -695,37 +852,27 @@ Proof.
 
   exfr.
 
-
   (* prove well-formedness *)
-
   iPureIntro. subst H'. clear -well_formed_before rj_LiveAt_H rj_has_no_predecessor.
 
-  destruct well_formed_before as (wf1 & wf2 & wf3). unfold LiveAt in *. repeat split.
-  - unfold del_i_max_once in *. intros.
-    case (decide (b < length H)) as [? | ?]; case (decide (a < length H)) as [? | ?].
-    + repeat rewrite lookup_app_l in H0 H1; eauto.
-    + rewrite lookup_app_l in H1; last done. rewrite lookup_app_r in H0; last lia. rewrite list_lookup_singleton_Some in H0.
-      naive_solver (eauto using elem_of_list_lookup_2).
-    + rewrite lookup_app_l in H0; last done. rewrite lookup_app_r in H1; last lia. rewrite list_lookup_singleton_Some in H1.
-      naive_solver (eauto using elem_of_list_lookup_2).
-    + repeat rewrite lookup_app_r in H0 H1; try lia. repeat rewrite list_lookup_singleton_Some in H0 H1. lia.
-  - unfold no_new_link_to_deleted in *. intros.
+  destruct well_formed_before as (wf1 & wf2). unfold LiveAt in *. repeat split.
+  - unfold no_new_link_to_deleted in *. intros i j o a b Hab Ha Hb.
     case (decide (b < length H)) as [? | ?].
     + case (decide (a < length H)) as [? | ?].
-      * repeat rewrite lookup_app_l in H1 H2; eauto.
+      * repeat rewrite lookup_app_l in Ha Hb; eauto.
       * lia.
-    + rewrite lookup_app_r in H2; try lia. rewrite list_lookup_singleton_Some in H2. naive_solver.
-  - unfold living_points_to_livings in *. rewrite interp_unaffected_by_del. unfold LiveAt in *. set_solver.
+    + rewrite lookup_app_r in Hb; try lia. rewrite list_lookup_singleton_Some in Hb. naive_solver.
+  - unfold live_points_to_live in *. rewrite interp_unaffected_by_del. unfold LiveAt in *. set_solver.
 Qed.
 
 
 Lemma hist_points_to_link i o j H B:
   HistAuth H -∗
-  HistPointsTo i o None -∗
+  HistPointsToLast i o None -∗
   HistPointedBy j B ==∗
 
   HistAuth (H ++ [link i o (Some j)]) ∗
-  HistPointsTo i o (Some j) ∗
+  HistPointsToLast i o (Some j) ∗
   HistPointedBy j (B ⊎ {[+ i +]}).
 Proof.
   iIntros "HistAuth PointsTo PointedBy".
@@ -740,9 +887,8 @@ Proof.
   iMod (mono_list_auth_own_update H' with "●H") as "[●H' #◯H']"; first by eexists.
 
   (* update succ_hist_map and PointsTo*)
-  iAssert (|==> ghost_map_auth γt 1 (succ_hist_map H') ∗ HistPointsTo i o (Some j))%I with "[●succ_hist PointsTo]" as ">[●succ_hist' $]". {
+  iAssert (|==> ghost_map_auth γt 1 (succ_hist_map H') ∗ HistPointsToLast i o (Some j))%I with "[●succ_hist PointsTo]" as ">[●succ_hist' $]". {
     iDestruct "PointsTo" as (?????) "(% & %Hlink_last & ◯Hlink & ◯succ_hist_io)". encode_agree Enc.
-
 
     remember (succ_hist_map Hlink !!! (i, o)) as shm_io_old.
     iDestruct (ghost_map_lookup with "●succ_hist ◯succ_hist_io") as "%shm_lookup".
@@ -751,13 +897,11 @@ Proof.
     iMod (ghost_map_update (shm_io_old ++ [Some j]) with "●succ_hist ◯succ_hist_io") as "[●succ_hist' ◯succ_hist_io]". rewrite -shm_update.
     assert (succ_hist_map H' !!! (i, o) = shm_io_old ++ [Some j]) as <-. { rewrite shm_update. eapply lookup_total_insert. }
 
-    unfold HistPointsTo. iFrame. exfr. subst H'. rewrite last_app. done.
+    unfold HistPointsToLast. iFrame. exfr. subst H'. rewrite last_app. done.
   }
-
 
   (* del_map stays same *)
   assert (del_map_consistent H' del_map). { eapply del_map_unaffected_by_links; set_solver. }
-
 
   iDestruct "PointedBy" as (?????) "[◯pred_j ◯del_map_j]". encode_agree Enc.
 
@@ -768,7 +912,7 @@ Proof.
 
   unfold to_pred_multiset_map in pm_lookup. rewrite lookup_fmap in pm_lookup.
 
-  destruct (π !! j) as [πj |] eqn: Eqn_πj; last naive_solver. simpl in *. inversion pm_lookup.
+  destruct (π !! j) as [πj |] eqn: Eqn_πj; last naive_solver. simpl in *. injection pm_lookup as H_B.
 
   (* do ghost updates *)
   remember (<[ j := πj ⊎ {[+ (i, o) +]} ]> π) as π'.
@@ -789,11 +933,13 @@ Proof.
   }
   assert (pred_map_consistent H' π'). {
     unfold pred_map_consistent in *. destruct pred_map_consistent_before as [pmc1 pmc2]. subst π' H'. split.
-    - intros. rewrite dom_insert_lookup in H1; last done. set_solver.
-    - intros. unfold LiveAt in *. case (decide ((i0, o0) = (i, o))) as [eq | NE_io].
-      + inversion eq. subst i0 o0. rewrite interp_lookup_app_link in H1. inversion H1.
+    - intros j' H_j'. rewrite dom_insert_lookup in H_j'; last done. set_solver.
+    - intros i' o' j' H_i'j' H_i'. unfold LiveAt in *.
+      case (decide ((i', o') = (i, o))) as [[= -> ->] | NE_io].
+      + rewrite interp_lookup_app_link in H_i'j'. injection H_i'j' as ->.
         rewrite lookup_insert. eexists. split; set_solver.
-      + rewrite interp_lookup_app_link_ne in H1; last done. case (decide (j = j0)) as [<- | NE_j].
+      + rewrite interp_lookup_app_link_ne in H_i'j'; last done.
+        case (decide (j = j')) as [<- | NE_j].
         * rewrite lookup_insert. eexists. split; set_solver.
         * rewrite lookup_insert_ne; last done. set_solver.
   }
@@ -804,23 +950,24 @@ Proof.
 
   subst H'. clear -well_formed_before j_alive.
   assert (∀ i1 i2, del i1 ∉ [link i2 o (Some j)]) by set_solver.
-  destruct well_formed_before as (wf1 & wf2 & wf3). repeat split.
-  - unfold del_i_max_once in *. intros. repeat rewrite lookup_app_Some in H1 H2. naive_solver (eauto using elem_of_list_lookup_2). (* TODO: make a lemma? *)
-  - unfold no_new_link_to_deleted in *. intros. repeat rewrite lookup_app_Some list_lookup_singleton in H2 H3.
-    destruct H2, H3, (b - length H); naive_solver (eauto using elem_of_list_lookup_2).
-  - unfold living_points_to_livings in *. intros. unfold LiveAt in *. case (decide ((i, o) = (i0, o0))) as [EQ_io | NE_io].
-    + inversion EQ_io. subst. rewrite interp_lookup_app_link in H1. set_solver.
-    + rewrite interp_lookup_app_link_ne in H1; last done. set_solver.
+  destruct well_formed_before as (wf1 & wf2). repeat split.
+  - unfold no_new_link_to_deleted in *. intros ? ? ? a b Hab Ha Hb.
+    repeat rewrite lookup_app_Some list_lookup_singleton in Ha Hb.
+    destruct Ha, Hb, (b - length H); naive_solver (eauto using elem_of_list_lookup_2).
+  - unfold live_points_to_live in *. intros i' o' j' H_i'j' Hi'.
+    unfold LiveAt in *. case (decide ((i, o) = (i', o'))) as [[= <- <-] | NE_io].
+    + rewrite interp_lookup_app_link in H_i'j'. set_solver.
+    + rewrite interp_lookup_app_link_ne in H_i'j'; last done. set_solver.
 Qed.
 
 
 Lemma hist_points_to_unlink i o j H B:
   HistAuth H -∗
-  HistPointsTo i o (Some j) -∗
+  HistPointsToLast i o (Some j) -∗
   HistPointedBy j B ==∗
 
   HistAuth (H ++ [link i o None]) ∗
-  HistPointsTo i o None ∗
+  HistPointsToLast i o None ∗
   HistPointedBy j (B ∖ {[+ i +]}).
 Proof.
   iIntros "HistAuth PointsTo PointedBy".
@@ -836,8 +983,8 @@ Proof.
   iMod (mono_list_auth_own_update H' with "●H") as "[●H' #◯H']"; first by eexists.
 
   (* update succ_hist_map and PointsTo*)
-  (* TODO: repeated code (almost same as link rule) *)
-  iAssert (|==> ghost_map_auth γt 1 (succ_hist_map H') ∗ HistPointsTo i o None)%I with "[●succ_hist PointsTo]" as ">[●succ_hist' $]". {
+  (* NOTE: repeated code (almost same as link rule) *)
+  iAssert (|==> ghost_map_auth γt 1 (succ_hist_map H') ∗ HistPointsToLast i o None)%I with "[●succ_hist PointsTo]" as ">[●succ_hist' $]". {
     iDestruct "PointsTo" as (?????) "(% & %Hlink_last & ◯Hlink & ◯succ_hist_io)". encode_agree Enc.
 
     remember (succ_hist_map Hlink !!! (i, o)) as shm_io_old.
@@ -847,7 +994,7 @@ Proof.
     iMod (ghost_map_update (shm_io_old ++ [None]) with "●succ_hist ◯succ_hist_io") as "[●succ_hist' ◯succ_hist_io]". rewrite -shm_update.
     assert (succ_hist_map H' !!! (i, o) = shm_io_old ++ [None]) as <-. { rewrite shm_update. eapply lookup_total_insert. }
 
-    unfold HistPointsTo. iFrame. exfr. subst H'. rewrite last_app. done.
+    unfold HistPointsToLast. iFrame. exfr. subst H'. rewrite last_app. done.
   }
 
   (* del_map stays same *)
@@ -888,55 +1035,57 @@ Proof.
       }
       assert (pred_map_consistent H' π'). {
         destruct pred_map_consistent_before as (pmc1 & pmc2). split.
-        - intros. subst π' H'.
+        - intros j' H_j'. subst π' H'.
           assert (j ∈ dom π); first by eapply elem_of_dom_2.
-          assert (j0 ∈ dom π). { rewrite dom_insert in H1. set_solver. }
+          assert (j' ∈ dom π). { rewrite dom_insert in H_j'. set_solver. }
           set_solver.
-        - intros. case (decide ((i, o) = (i0, o0))) as [EQ | NE].
-          + inversion EQ. subst i0 o0 H'. exfalso.
-            rewrite interp_lookup_app_link in H1. done.
-          + subst H' π'. rewrite interp_lookup_app_link_ne in H1; last done. unfold LiveAt in *.
-            assert (∃ i_s, π !! j0 = Some i_s ∧ (i0, o0) ∈ i_s) as [πj0 [interp i0o0_in_πj0]]. { apply pmc2; set_solver. }
-            case (decide (j = j0)) as [<- | NE_j].
-            * assert (πj0 = πj) as -> by naive_solver. rewrite lookup_insert. eexists. split; try done.
-              subst πj'. clear -NE i0o0_in_πj0. multiset_solver.
+        - intros i' o' j' H_i'j' H_i'.
+          case (decide ((i, o) = (i', o'))) as [[= <- <-] | NE].
+          + subst H'. exfalso.
+            rewrite interp_lookup_app_link in H_i'j'. done.
+          + subst H' π'. rewrite interp_lookup_app_link_ne in H_i'j'; last done. unfold LiveAt in *.
+            assert (∃ i_s, π !! j' = Some i_s ∧ (i', o') ∈ i_s) as [πj'' [interp H_i'o']]. { apply pmc2; set_solver. }
+            case (decide (j = j')) as [<- | NE_j].
+            * assert (πj'' = πj) as -> by naive_solver. rewrite lookup_insert. eexists. split; try done.
+              subst πj'. clear -NE H_i'o'. multiset_solver.
             * rewrite lookup_insert_ne; last done. naive_solver.
       }
 
-      iExists (π'). exfr. done.
+      iExists π'. exfr. done.
     - (* if i is not alive, we can delete any (i, o) without breaking the consistency *)
-      case (decide_rel (∈) i B) as [i_in_B | i_not_in_B].
+      case (decide (i ∈ B)) as [i_in_B | i_not_in_B].
       +
-        iMod (remove_deleted_from_PointedBy with "●pred_multiset PointedBy") as (πj o') "(%Eqn_πj & %io'_in_πj & ●pred_multiset & PointedBy')"; try done.
+        iMod (remove_deleted_from_PointedBy with "●pred_multiset PointedBy") as (πj ?) "(%Eqn_πj & %io'_in_πj & ●pred_multiset & PointedBy')"; try done.
         exfr. iPureIntro.
 
         (* prove pred_map_consistency after the update *)
         {
           destruct pred_map_consistent_before as (pmc1 & pmc2). split.
-          - (* TODO: repeated code *)
-            intros. subst H'.
+          - (* NOTE: repeated code *)
+            intros j' H_j'. subst H'.
             assert (j ∈ dom π); first by eapply elem_of_dom_2.
-            assert (j0 ∈ dom π). { rewrite dom_insert in H1. set_solver. }
+            assert (j' ∈ dom π). { rewrite dom_insert in H_j'. set_solver. }
             set_solver.
-          - intros. unfold LiveAt in *.
-            assert (i ≠ i0) as NE_i by set_solver. subst H'.
-            rewrite interp_lookup_app_link_ne in H1; last naive_solver.
+          - intros i' o' j' H_i'j' H_i'. unfold LiveAt in *.
+            assert (i ≠ i') as NE_i by set_solver. subst H'.
+            rewrite interp_lookup_app_link_ne in H_i'j'; last naive_solver.
 
-            (* TODO: repeated code *)
-            assert (∃ i_s, π !! j0 = Some i_s ∧ (i0, o0) ∈ i_s) as [πj0 [? i0o0_in_πj0]]. { apply pmc2; set_solver. }
-            case (decide (j = j0)) as [<- | NE_j].
-            + assert (πj0 = πj) as -> by naive_solver. rewrite lookup_insert. eexists. split; try done.
-              clear -NE_i i0o0_in_πj0. multiset_solver.
+            (* NOTE: repeated code *)
+            assert (∃ i_s, π !! j' = Some i_s ∧ (i', o') ∈ i_s) as [πj'' [? H_i'o']]. { apply pmc2; set_solver. }
+            case (decide (j = j')) as [<- | NE_j].
+            + assert (πj'' = πj) as -> by naive_solver. rewrite lookup_insert. eexists. split; try done.
+              clear -NE_i H_i'o'. multiset_solver.
             + rewrite lookup_insert_ne; last done. naive_solver.
         }
       + (* If i ∉ B, we doesn't have to change anything *)
         assert (B ∖ {[+ i +]} = B) as -> by multiset_solver. iExists π.
         assert (pred_map_consistent H' π). {
-          destruct pred_map_consistent_before as (pmc1 & pmc2). split; unfold LiveAt in *; intros.
+          destruct pred_map_consistent_before as (pmc1 & pmc2). split; unfold LiveAt in *.
           - set_solver.
-          - subst H'. case (decide ((i, o) = (i0, o0))) as [EQ | NE].
-            + exfalso. clear -i_not_alive H2 EQ. set_solver.
-            + rewrite interp_lookup_app_link_ne in H1; last done. apply pmc2; set_solver.
+          - intros i' o' j' H_i'j' H_i'.
+            subst H'. case (decide ((i, o) = (i', o'))) as [[= <- <-] | NE].
+            + exfalso. set_solver +i_not_alive H_i'.
+            + rewrite interp_lookup_app_link_ne in H_i'j'; last done. apply pmc2; set_solver.
         }
 
         exfr. done.
@@ -945,25 +1094,25 @@ Proof.
   exfr. iPureIntro.
 
   (* prove well-formedness *)
-
-  (* TODO: repeated code *)
+  (* NOTE: repeated code from hist_points_to_link *)
   subst H'. clear -well_formed_before.
   assert (∀ i1 i2, del i1 ∉ [link i2 o None]) by set_solver.
-  destruct well_formed_before as (wf1 & wf2 & wf3). repeat split.
-  - unfold del_i_max_once in *. intros. repeat rewrite lookup_app_Some in H1 H2. naive_solver (eauto using elem_of_list_lookup_2).
-  - unfold no_new_link_to_deleted in *. intros. repeat rewrite lookup_app_Some list_lookup_singleton in H2 H3.
-    destruct H2, H3, (b - length H); naive_solver (eauto using elem_of_list_lookup_2).
-  - unfold living_points_to_livings in *. intros. unfold LiveAt in *. case (decide ((i, o) = (i0, o0))) as [EQ_io | NE_io].
-    + inversion EQ_io. subst. rewrite interp_lookup_app_link in H1. set_solver.
-    + rewrite interp_lookup_app_link_ne in H1; last done. set_solver.
+  destruct well_formed_before as (wf1 & wf2). repeat split.
+  - unfold no_new_link_to_deleted in *. intros ? ? ? a b Hab Ha Hb.
+    repeat rewrite lookup_app_Some list_lookup_singleton in Ha Hb.
+    destruct Ha, Hb, (b - length H); naive_solver (eauto using elem_of_list_lookup_2).
+  - unfold live_points_to_live in *. intros i' o' j' H_i'j' Hi'.
+    unfold LiveAt in *. case (decide ((i, o) = (i', o'))) as [[= <- <-] | NE_io].
+    + rewrite interp_lookup_app_link in H_i'j'. set_solver.
+    + rewrite interp_lookup_app_link_ne in H_i'j'; last done. set_solver.
 Qed.
 
 Lemma hist_points_to_unlink_simple i o oj H:
   HistAuth H -∗
-  HistPointsTo i o oj ==∗
+  HistPointsToLast i o oj ==∗
 
   HistAuth (H ++ [link i o None]) ∗
-  HistPointsTo i o None.
+  HistPointsToLast i o None.
 Proof.
   iIntros "HistAuth PointsTo".
   iDestruct "HistAuth" as (??????) "(%Enc & %del_map_consistent_before & %pred_map_consistent_before & %well_formed_before &
@@ -974,10 +1123,9 @@ Proof.
   (* update H' *)
   iMod (mono_list_auth_own_update H' with "●H") as "[●H' #◯H']"; first by eexists.
 
-
   (* update succ_hist_map and PointsTo*)
-  (* TODO: repeated code (same as unlink rule) *)
-  iAssert (|==> ghost_map_auth γt 1 (succ_hist_map H') ∗ HistPointsTo i o None)%I with "[●succ_hist PointsTo]" as ">[●succ_hist' $]". {
+  (* NOTE: repeated code (same as unlink rule) *)
+  iAssert (|==> ghost_map_auth γt 1 (succ_hist_map H') ∗ HistPointsToLast i o None)%I with "[●succ_hist PointsTo]" as ">[●succ_hist' $]". {
     iDestruct "PointsTo" as (?????) "(% & %Hlink_last & ◯Hlink & ◯succ_hist_io)". encode_agree Enc.
 
     remember (succ_hist_map Hlink !!! (i, o)) as shm_io_old.
@@ -987,7 +1135,7 @@ Proof.
     iMod (ghost_map_update (shm_io_old ++ [None]) with "●succ_hist ◯succ_hist_io") as "[●succ_hist' ◯succ_hist_io]". rewrite -shm_update.
     assert (succ_hist_map H' !!! (i, o) = shm_io_old ++ [None]) as <-. { rewrite shm_update. eapply lookup_total_insert. }
 
-    unfold HistPointsTo. iFrame. exfr. subst H'. rewrite last_app. done.
+    unfold HistPointsToLast. iFrame. exfr. subst H'. rewrite last_app. done.
   }
 
   (* del_map stays same *)
@@ -997,37 +1145,37 @@ Proof.
   assert (pred_map_consistent H' π). {
     subst H'. destruct pred_map_consistent_before as [pmc1 pmc2]. split.
     - set_solver.
-    - unfold LiveAt in *. intros. apply pmc2.
-      + case (decide ((i, o) = (i0, o0))) as [EQ | NE].
-        * inversion EQ. subst i0 o0. rewrite interp_lookup_app_link in H1. done.
-        * rewrite interp_lookup_app_link_ne in H1; done.
+    - unfold LiveAt in *. intros i' o' j' H_i'j' H_i'. apply pmc2.
+      + case (decide ((i, o) = (i', o'))) as [[= <- <-] | NE].
+        * rewrite interp_lookup_app_link in H_i'j'. done.
+        * rewrite interp_lookup_app_link_ne in H_i'j'; done.
       + set_solver.
   }
   exfr. iPureIntro.
 
   (* prove well-formedness *)
-
-  (* TODO: repeated code *)
+  (* NOTE: repeated code from hist_points_to_unlink *)
   subst H'. clear -well_formed_before.
   assert (∀ i1 i2, del i1 ∉ [link i2 o None]) by set_solver.
-  destruct well_formed_before as (wf1 & wf2 & wf3). repeat split.
-  - unfold del_i_max_once in *. intros. repeat rewrite lookup_app_Some in H1 H2. naive_solver (eauto using elem_of_list_lookup_2).
-  - unfold no_new_link_to_deleted in *. intros. repeat rewrite lookup_app_Some list_lookup_singleton in H2 H3.
-    destruct H2, H3, (b - length H); naive_solver (eauto using elem_of_list_lookup_2).
-  - unfold living_points_to_livings in *. intros. unfold LiveAt in *. case (decide ((i, o) = (i0, o0))) as [EQ_io | NE_io].
-    + inversion EQ_io. subst. rewrite interp_lookup_app_link in H1. set_solver.
-    + rewrite interp_lookup_app_link_ne in H1; last done. set_solver.
+  destruct well_formed_before as (wf1 & wf2). repeat split.
+  - unfold no_new_link_to_deleted in *. intros ? ? ? a b Hab Ha Hb.
+    repeat rewrite lookup_app_Some list_lookup_singleton in Ha Hb.
+    destruct Ha, Hb, (b - length H); naive_solver (eauto using elem_of_list_lookup_2).
+  - unfold live_points_to_live in *. intros i' o' j' H_i'j' Hi'.
+    unfold LiveAt in *. case (decide ((i, o) = (i', o'))) as [[= <- <-] | NE_io].
+    + rewrite interp_lookup_app_link in H_i'j'. set_solver.
+    + rewrite interp_lookup_app_link_ne in H_i'j'; last done. set_solver.
 Qed.
 
 
 Lemma hist_points_to_update i o j1 H B1 j2 B2:
   HistAuth H -∗
-  HistPointsTo i o (Some j1) -∗
+  HistPointsToLast i o (Some j1) -∗
   HistPointedBy j1 B1 -∗
   HistPointedBy j2 B2 ==∗
 
   HistAuth (H ++ [link i o None; link i o (Some j2)]) ∗
-  HistPointsTo i o (Some j2) ∗
+  HistPointsToLast i o (Some j2) ∗
   HistPointedBy j1 (B1 ∖ {[+ i +]}) ∗
   HistPointedBy j2 (B2 ⊎ {[+ i +]}).
 Proof.
@@ -1041,9 +1189,9 @@ Qed.
 
 
 Lemma hist_pointedby_remove_deleted H i j B:
-  HistAuth H -∗ HistDeleted i -∗ HistPointedBy j B ==∗ HistAuth H ∗ HistDeleted i ∗ HistPointedBy j (B ∖ {[+ i +]}).
+  HistAuth H -∗ HistDeleted i -∗ HistPointedBy j B ==∗ HistAuth H ∗ HistPointedBy j (B ∖ {[+ i +]}).
 Proof.
-  iIntros "HistAuth Deleted PointedBy".
+  iIntros "HistAuth #Deleted PointedBy".
   iDestruct "HistAuth" as (??????) "(%Enc & %del_map_consistent_before & %pred_map_consistent_before & %well_formed & ●H & ? & ●pred_multiset & ●del_map)".
 
   iAssert (⌜ ¬ LiveAt H i ⌝)%I as "%i_not_alive". {
@@ -1054,25 +1202,25 @@ Proof.
 
   case (decide_rel (∈) i B) as [i_in_B | i_not_in_B].
   -
-    iMod (remove_deleted_from_PointedBy with "●pred_multiset PointedBy") as (πj o') "(%Eqn_πj & %io'_in_πj & ●pred_multiset & PointedBy')"; try done.
+    iMod (remove_deleted_from_PointedBy with "●pred_multiset PointedBy") as (πj o) "(%Eqn_πj & %io'_in_πj & ●pred_multiset & PointedBy')"; try done.
 
-    assert (pred_map_consistent H (<[j:=πj ∖ {[+ (i, o') +]}]> π)). {
+    assert (pred_map_consistent H (<[j:=πj ∖ {[+ (i, o) +]}]> π)). {
       destruct pred_map_consistent_before as (pmc1 & pmc2). split.
-      - intros.
+      - intros j' H_j'.
         assert (j ∈ dom π); first by eapply elem_of_dom_2.
-        assert (j0 ∈ dom π). { rewrite dom_insert in H0. set_solver. }
-        auto.
-      - intros.
-        assert (∃ i_s, π !! j0 = Some i_s ∧ (i0, o) ∈ i_s) as [πj0 [interp i0o_in_πj0]]. { apply pmc2; set_solver. }
-        assert (i0 ≠ i) as NE_i by naive_solver.
-        case (decide (j = j0)) as [<- | NE_j].
-        + assert (πj0 = πj) as -> by naive_solver. rewrite lookup_insert. eexists. split; try done. clear -NE_i i0o_in_πj0. multiset_solver.
+        assert (j' ∈ dom π). { rewrite dom_insert in H_j'. set_solver. }
+        by apply pmc1.
+      - intros i' o' j' H_i'j' Hi'.
+        assert (∃ i_s, π !! j' = Some i_s ∧ (i', o') ∈ i_s) as [πj' [interp H_i'o']]. { apply pmc2; set_solver. }
+        assert (i' ≠ i) as NE_i by naive_solver.
+        case (decide (j = j')) as [<- | NE_j].
+        + assert (πj' = πj) as -> by congruence. rewrite lookup_insert.
+          eexists. split; try done. clear -NE_i H_i'o'. multiset_solver.
         + rewrite lookup_insert_ne; last done. naive_solver.
     }
 
-    exfr. done.
-  - assert (B ∖ {[+ i +]} = B) as -> by multiset_solver. exfr. done.
-
+    iFrame. done.
+  - assert (B ∖ {[+ i +]} = B) as -> by multiset_solver. iFrame. done.
 Qed.
 
 End ghost.
@@ -1093,9 +1241,9 @@ Proof.
   remember (encode (γh, γt, γb, γd)) as γ.
 
   repeat iExists _. iFrame "∗%". iPureIntro.
-  repeat split; unfold del_i_max_once, no_new_link_to_deleted, living_points_to_livings; try set_solver.
+  repeat split; unfold no_new_link_to_deleted, live_points_to_live; try set_solver.
 Qed.
 
 End alloc.
 
-#[export] Typeclasses Opaque HistAuth HistSnap HistPointsTo HistPointedBy HistDeleted.
+#[export] Typeclasses Opaque HistAuth HistSnap HistPointsTo HistPointsToLast HistPointedTo HistPointedBy HistDeleted.

@@ -32,35 +32,35 @@ Definition ordset_new_spec' : Prop :=
 Definition ordset_lookup_spec' : Prop :=
   ⊢ ∀ γr γo oset (x : Z) g,
   IsOrderedSet γr γo oset -∗ rcu.(Inactive) γr g -∗
-  <<< ∀∀ xs, OrderedSet γo xs >>>
+  <<{ ∀∀ xs, OrderedSet γo xs }>>
     ordset_lookup #oset #g #x @ ⊤,(↑ordsetN ∪ ↑(ptrsN rcuN)),↑(mgmtN rcuN)
-  <<< ∃∃ (b : bool), OrderedSet γo xs ∗ ⌜b = bool_decide (x ∈ xs)⌝, RET #b, rcu.(Inactive) γr g >>>.
+  <<{ ∃∃ (b : bool), OrderedSet γo xs ∗ ⌜b = bool_decide (x ∈ xs)⌝ | RET #b; rcu.(Inactive) γr g }>>.
 
 Definition ordset_insert_spec' : Prop :=
   ⊢ ∀ γr γo oset (x : Z) g,
   IsOrderedSet γr γo oset -∗ rcu.(Inactive) γr g -∗
-  <<< ∀∀ xs, OrderedSet γo xs >>>
+  <<{ ∀∀ xs, OrderedSet γo xs }>>
     ordset_insert #oset #g #x @ ⊤,(↑ordsetN ∪ ↑(ptrsN rcuN)),↑(mgmtN rcuN)
-  <<< ∃∃ (b : bool) xs', OrderedSet γo xs' ∗
+  <<{ ∃∃ (b : bool) xs', OrderedSet γo xs' ∗
           ⌜if (b : bool) then
             x ∉ xs ∧ xs' = {[ x ]} ∪ xs
           else
-            x ∈ xs ∧ xs' = xs⌝,
-          RET #b,
-          rcu.(Inactive) γr g >>>.
+            x ∈ xs ∧ xs' = xs⌝ |
+          RET #b;
+          rcu.(Inactive) γr g }>>.
 
 Definition ordset_delete_spec' : Prop :=
   ⊢ ∀ γr γo oset (x : Z) g,
   IsOrderedSet γr γo oset -∗ rcu.(Inactive) γr g -∗
-  <<< ∀∀ xs, OrderedSet γo xs >>>
+  <<{ ∀∀ xs, OrderedSet γo xs }>>
     ordset_delete #oset #g #x @ ⊤,(↑ordsetN ∪ ↑(ptrsN rcuN)),↑(mgmtN rcuN)
-  <<< ∃∃ (b : bool) xs', OrderedSet γo xs' ∗
+  <<{ ∃∃ (b : bool) xs', OrderedSet γo xs' ∗
           ⌜if (b : bool) then
             x ∈ xs ∧ xs' = xs ∖ {[ x ]}
           else
-            x ∉ xs ∧ xs' = xs⌝,
-          RET #b,
-          rcu.(Inactive) γr g >>>.
+            x ∉ xs ∧ xs' = xs⌝ |
+          RET #b;
+          rcu.(Inactive) γr g }>>.
 End spec.
 
 Record ordset_code : Type := OrderedSetCode {

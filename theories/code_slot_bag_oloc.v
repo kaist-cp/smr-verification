@@ -36,20 +36,6 @@ Definition seq_bag_contains : val :=
     let: "head" := !("seq" +ₗ #seqHead) in
     seq_bag_contains_loop "head" "ptr".
 
-Definition seq_bag_contains_other_loop : val :=
-  rec: "loop" "head" "val" :=
-    if: "head" = #NULL
-    then #false
-    else
-      if: !("head" +ₗ #seqNodeValue) ≠ "val"
-      then #true
-      else "loop" !("head" +ₗ #seqNodeNext) "val".
-
-Definition seq_bag_contains_other : val :=
-  λ: "seq" "val",
-    let: "head" := !("seq" +ₗ #seqHead) in
-    seq_bag_contains_other_loop "head" "val".
-
 (** Slot *)
 Notation slotSize := 3%nat (only parsing).
 Notation slotNext := 0 (only parsing).

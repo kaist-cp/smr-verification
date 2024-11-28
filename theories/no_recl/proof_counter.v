@@ -1,4 +1,3 @@
-From iris.algebra Require Import agree.
 From iris.base_logic.lib Require Import invariants ghost_var.
 From smr.program_logic Require Import atomic.
 From smr.lang Require Import proofmode notation.
@@ -11,7 +10,7 @@ Set Printing Projections.
 Local Open Scope Z.
 
 Class counterG Σ := CounterG {
-  counter_ghost_varG :> ghost_varG Σ Z;
+  #[local] counter_ghost_varG :: ghost_varG Σ Z;
 }.
 
 Definition counterΣ : gFunctors := #[ghost_varΣ Z].
@@ -49,10 +48,10 @@ Proof.
   wp_lam. wp_alloc c as "c↦" "†c". wp_let.
   simpl. rewrite array_cons. iDestruct "c↦" as "[c.n↦ _]".
   wp_alloc p as "p↦" "†p". rewrite array_singleton.
-  wp_let. wp_store. wp_op. rewrite loc_add_0. wp_store.
+  wp_let. wp_store. wp_op. rewrite Loc.add_0. wp_store.
 
   iMod (ghost_var_alloc 0) as (γc) "[Hγc Hγc']".
-  iMod (mapsto_persist with "p↦") as "#p↦".
+  iMod (pointsto_persist with "p↦") as "#p↦".
   iAssert (Counter γc 0) with "[Hγc]" as "C".
   { repeat iExists _. by iFrame. }
   iMod (inv_alloc counterN _ (CounterInternalInv c γc) with "[-HΦ C]") as "#Inv".
@@ -71,7 +70,7 @@ Proof using All.
 
   wp_lam.
   wp_alloc n as "n↦" "†n". rewrite array_singleton.
-  wp_let. wp_op. rewrite loc_add_0.
+  wp_let. wp_op. rewrite Loc.add_0.
 
   (* start counter loop *)
   move: #0 => vn.
@@ -93,8 +92,8 @@ Proof using All.
   case (decide (p3 = p1)) as [->|NE].
   - (* success *) iClear "IH".
     wp_cmpxchg_suc.
-    iMod (mapsto_persist with "n↦") as "n↦".
-    iDestruct (mapsto_agree with "p↦ p'↦") as %[= <-].
+    iMod (pointsto_persist with "n↦") as "n↦".
+    iDestruct (pointsto_agree with "p↦ p'↦") as %[= <-].
 
     iMod "AU" as (x2') "[C [_ Commit]]".
     iDestruct "C" as "Hγc'".
@@ -106,7 +105,6 @@ Proof using All.
     { repeat iExists _. iFrame "∗#%". }
     wp_pures.
 
-    wp_bind (! _)%E.
     wp_load.
     wp_pures.
 

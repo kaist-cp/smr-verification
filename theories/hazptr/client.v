@@ -112,10 +112,10 @@ Proof using All.
   wp_let.
   awp_apply (counter.(spec_counter.counter_inc_spec) with "IC") without "HΦ".
   iAaccIntro with "C"; first by eauto with iFrame.
-  iIntros "C !> _ HΦ". wp_seq.
+  iIntros "C !> HΦ". wp_seq.
   awp_apply (hcounter.(spec_hybrid_counter.hcounter_inc_spec) with "IH") without "HΦ".
   iAaccIntro with "H"; first by eauto with iFrame.
-  iIntros "H !> _ HΦ". wp_seq.
+  iIntros "H !> HΦ". wp_seq.
 
   (* stack, queue *)
   wp_apply (treiber.(spec_stack.stack_new_spec) with "[//]") as (??) "[#IS S]".
@@ -127,25 +127,23 @@ Proof using All.
     Suspected reason is simplification due to [of_val]  *)
   awp_apply (treiber.(spec_stack.stack_push_spec) $! _ _ #1 with "IS") without "HΦ".
   iAaccIntro with "S"; first by eauto with iFrame.
-  iIntros "S !> _ HΦ". wp_seq.
+  iIntros "S !> HΦ". wp_seq.
   awp_apply (ms.(spec_queue.queue_push_spec) $! _ _ #2 with "IQ") without "HΦ".
   iAaccIntro with "Q"; first by eauto with iFrame.
-  iIntros "Q !> _ HΦ". wp_seq.
+  iIntros "Q !> HΦ". wp_seq.
   awp_apply (treiber.(spec_stack.stack_pop_spec) with "IS") without "HΦ".
   iAaccIntro with "S"; first by eauto with iFrame.
-  iIntros "S !> _ HΦ". wp_pures.
+  iIntros "S !> HΦ". wp_pures.
   awp_apply (ms.(spec_queue.queue_pop_spec) with "IQ") without "HΦ".
   iAaccIntro with "Q"; first by eauto with iFrame.
-  iIntros "Q !> _ HΦ". wp_pures.
+  iIntros "Q !> HΦ". wp_pures.
 
   wp_apply (hazptr.(spec_hazptr.hazard_domain_do_reclamation_spec) with "D"); auto.
   iIntros. wp_pures. by iApply "HΦ".
 Qed.
 
 Lemma reclaim_forever_spec γd d :
-  proof_hazptr.IsHazardDomain hazptrN
-    (proof_slot_bag_oloc.slot_bag_impl Σ)
-    (proof_retired_list.retired_list_impl Σ) γd d -∗
+  (hazard_pointer_impl Σ).(spec_hazptr.IsHazardDomain) γd d -∗
   {{{ True }}} reclaim_forever #d {{{ RET #(); True }}}.
 Proof.
   iIntros "#D".
@@ -171,9 +169,9 @@ Proof using All.
   wp_apply wp_fork.
   { awp_apply (treiber.(spec_stack.stack_push_spec) $! _ _ #10 with "IS").
     iInv "SInv" as (xs) ">S". iAaccIntro with "S".
-    { iIntros "S !>". iFrame. eauto. }
+    { iIntros "S !>". iFrame. }
     iIntros "S !>". iSplitL "S"; eauto.
-    iIntros "_". wp_seq.
+    wp_seq.
     awp_apply (treiber.(spec_stack.stack_pop_spec) with "IS").
     iInv "SInv" as (xs') ">S". iAaccIntro with "S".
     { iIntros "S". eauto with iFrame. }
@@ -183,14 +181,14 @@ Proof using All.
   iIntros. wp_seq.
   awp_apply (treiber.(spec_stack.stack_push_spec) $! _ _ #10 with "IS").
   iInv "SInv" as (xs) ">S". iAaccIntro with "S".
-  { iIntros "S !>". iFrame. eauto. }
+  { iIntros "S !>". iFrame. }
   iIntros "S !>". iSplitL "S"; eauto.
-  iIntros "_". wp_seq.
+  wp_seq.
   awp_apply (treiber.(spec_stack.stack_pop_spec) with "IS") without "HΦ".
   iInv "SInv" as (xs') ">S". iAaccIntro with "S".
   { iIntros "S". eauto with iFrame. }
   iIntros "S !>". iSplitL "S"; eauto with iFrame.
-  iIntros "_ HΦ". wp_pures. by iApply "HΦ".
+  iIntros "HΦ". wp_pures. by iApply "HΦ".
 Qed.
 
 Lemma client3_spec :
@@ -208,17 +206,17 @@ Proof using All.
 
   awp_apply (elimstack.(spec_stack.stack_push_spec) $! _ _ #10 with "IS1") without "HΦ".
   iAaccIntro with "S1"; first by eauto with iFrame.
-  iIntros "S1 !> _ HΦ". wp_seq.
+  iIntros "S1 !> HΦ". wp_seq.
   awp_apply (elimstack.(spec_stack.stack_pop_spec) with "IS1") without "HΦ".
   iAaccIntro with "S1"; first by eauto with iFrame.
-  iIntros "S1 !> _ HΦ". wp_pures.
+  iIntros "S1 !> HΦ". wp_pures.
 
   awp_apply (elimstack.(spec_stack.stack_push_spec) $! _ _ #10 with "IS2") without "HΦ".
   iAaccIntro with "S2"; first by eauto with iFrame.
-  iIntros "S2 !> _ HΦ". wp_seq.
+  iIntros "S2 !> HΦ". wp_seq.
   awp_apply (elimstack.(spec_stack.stack_pop_spec) with "IS2") without "HΦ".
   iAaccIntro with "S2"; first by eauto with iFrame.
-  iIntros "S2 !> _ HΦ". wp_pures. by iApply "HΦ".
+  iIntros "S2 !> HΦ". wp_pures. by iApply "HΦ".
 Qed.
 
 End proof.

@@ -30,9 +30,9 @@ Definition hcounter_new_spec' : Prop :=
 Definition hcounter_inc_spec' : Prop :=
   ⊢ ∀ γ c,
   IsHCounter γ c -∗
-  <<< ∀∀ (x : nat), HCounter γ x >>>
+  <<{ ∀∀ (x : nat), HCounter γ x }>>
     hcounter_inc #c @ ⊤,(↑hcounterN ∪ ↑(ptrsN hazptrN)),↑(mgmtN hazptrN)
-  <<< HCounter γ (x + 1)%nat, RET #x >>>.
+  <<{ HCounter γ (x + 1)%nat | RET #x }>>.
 
 End spec.
 

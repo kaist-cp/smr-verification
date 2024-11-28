@@ -10,10 +10,10 @@ From iris.prelude Require Import options.
 From smr Require Import helpers.
 
 Class epoch_historyG Σ := EpochHistoryG {
-  epoch_gnamesG :> mono_listG (gname * gname * gname) Σ;
-  epoch_ownG :> inG Σ (coP_authR (gset_disjUR positive));
-  epoch_snapG :> inG Σ (authUR (gsetUR positive));
-  epoch_finalizedG :> inG Σ (csumR (exclR unitO) (agreeR (gsetUR positive)));
+  #[local] epoch_gnamesG :: mono_listG (gname * gname * gname) Σ;
+  #[local] epoch_ownG :: inG Σ (coP_authR (gset_disjUR positive));
+  #[local] epoch_snapG :: inG Σ (authUR (gsetUR positive));
+  #[local] epoch_finalizedG :: inG Σ (csumR (exclR unitO) (agreeR (gsetUR positive)));
 }.
 
 Definition epoch_historyΣ : gFunctors :=
@@ -330,7 +330,7 @@ Proof.
   iSplitR "◯Le ◯oe"; last first.
   { iExists (γoe, γse, γfe), _. iFrame. }
   iExists gnames.
-  rewrite alter_length. iSplit; auto. iFrame.
+  rewrite length_alter. iSplit; auto. iFrame.
   iApply (big_sepL2_delete _ _ _ e); eauto; simpl.
   { rewrite list_lookup_alter. by rewrite Hue. }
   rewrite (union_comm_L unlinked_e).
@@ -395,7 +395,6 @@ Proof.
     + rewrite bool_decide_eq_true_2; auto. lia.
     + rewrite bool_decide_eq_false_2; auto. lia.
   - iExists (γo', γs', γf'), _. iFrame.
-    iApply mono_list_idx_own_get; auto.
     by rewrite Hgn snoc_lookup.
 Qed.
 
@@ -502,7 +501,7 @@ Proof.
     iDestruct (mono_list_lb_own_get with "●L") as "#◯L+".
   iDestruct (mono_list_auth_lb_valid with "●L ◯L") as %[_ Hpref].
   iDestruct ((big_sepL2_length _ _ (take k ehist)) with "EFin") as %Hgn'.
-  rewrite take_length_le in Hgn'; last lia.
+  rewrite length_take_le in Hgn'; last lia.
 
   (* copy Cinr at k *)
   assert (is_Some (ehist !! k)) as [unlinked_k Huk].
@@ -546,7 +545,7 @@ Proof.
   ); last first.
   { intros. by apply H. }
 
-  iIntros (k). iInduction k as [|k] "Hk".
+  iIntros (k). iInduction k as [|k Hk].
   - iIntros (Hlen') "EH".
     iDestruct "EH" as (gnames Hgn) "[●L EH]".
     iDestruct (mono_list_lb_own_get with "●L") as "#◯L".
@@ -669,7 +668,7 @@ Lemma epoch_history_le_strong ehist ehistF :
 Proof.
   iIntros (LE) "EH EFin".
   iDestruct (epoch_history_prefix_strong with "EH EFin") as %PF; [done|].
-  iPureIntro. apply prefix_length in PF. rewrite take_length_le in PF; auto. lia.
+  iPureIntro. apply prefix_length in PF. rewrite length_take_le in PF; auto. lia.
 Qed.
 
 Lemma epoch_history_le ehist ehistF :

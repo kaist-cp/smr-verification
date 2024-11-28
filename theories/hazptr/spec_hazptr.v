@@ -89,18 +89,18 @@ Definition shield_protect_spec' : Prop :=
   IsHazardDomain γd d -∗
   Shield γd s s_st -∗
   (* TODO: this create a hole for size_i and R when pa is None. This blocks automation with diaframe *)
-  <<< ∀∀ (pa : option blk) γ_p size_i R,
+  <<{ ∀∀ (pa : option blk) γ_p size_i R,
       a ↦{dq} #(oblk_to_lit pa) ∗
       if pa is Some p then
         ▷ Managed γd p γ_p size_i R
-      else True >>>
+      else True }>>
     shield_protect #s #a @ E,∅,↑(mgmtN N)
-  <<< a ↦{dq} #(oblk_to_lit pa) ∗
+  <<{ a ↦{dq} #(oblk_to_lit pa) ∗
       if pa is Some p then
         Managed γd p γ_p size_i R ∗ Shield γd s (Validated p γ_p R size_i)
       else
-        Shield γd s Deactivated,
-      RET #(oblk_to_lit pa) >>>.
+        Shield γd s Deactivated |
+      RET #(oblk_to_lit pa) }>>.
 
 (* Access the protected pointer. *)
 Definition shield_acc' : Prop :=

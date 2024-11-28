@@ -29,18 +29,18 @@ Definition stack_new_spec' : Prop :=
 Definition stack_push_spec' : Prop :=
   ⊢ ∀ γ st (x : val),
   IsStack γ st -∗
-  <<< ∀∀ xs, Stack γ xs >>>
+  <<{ ∀∀ xs, Stack γ xs }>>
     stack_push #st x @ ⊤,↑stackN,∅
-  <<< Stack γ (x::xs), RET #() >>>.
+  <<{ Stack γ (x::xs) | RET #() }>>.
 
 Definition stack_pop_spec' : Prop :=
   ⊢ ∀ γ st,
   IsStack γ st -∗
-  <<< ∀∀ xs, Stack γ xs >>>
+  <<{ ∀∀ xs, Stack γ xs }>>
     stack_pop #st @ ⊤,↑stackN,∅
-  <<< Stack γ (match xs with | [] => [] | _::xs' => xs' end),
+  <<{ Stack γ (match xs with | [] => [] | _::xs' => xs' end) |
       RET (match xs with | [] => NONEV | v::_ => SOMEV v end)
-  >>>.
+  }>>.
 
 End spec.
 

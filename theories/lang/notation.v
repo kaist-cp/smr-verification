@@ -6,9 +6,9 @@ From iris.prelude Require Import options.
 Coercion FinInt : Z >-> inf_Z.
 Coercion LitInt : inf_Z >-> base_lit.
 Coercion LitBool : bool >-> base_lit.
-Coercion blk_to_loc : blk >-> loc.
-Coercion loc_to_tagged_loc : loc >-> tagged_loc.
-Coercion LitLoc : tagged_loc >-> base_lit.
+Coercion Loc.blk_to_loc : blk >-> loc.
+Coercion Loc.loc_to_tagged_loc : loc >-> Loc.tagged_loc.
+Coercion LitLoc : Loc.tagged_loc >-> base_lit.
 Coercion LitProphecy : proph_id >-> base_lit.
 
 Coercion App : expr >-> Funclass.

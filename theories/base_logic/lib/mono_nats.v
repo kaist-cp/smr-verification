@@ -6,45 +6,47 @@ From iris.base_logic.lib Require Export own.
 From iris.prelude Require Import options.
 From smr Require Import helpers.
 
-Section discrete_fun.
-  Lemma discrete_fun_update_pointwise `{EqDecision A} {B : A → ucmra}
-      (f g : discrete_fun B) :
-    (∀ x, f x ~~> g x) → f ~~> g.
-  Proof.
-    unfold cmra_update. intros Hp n mz Hf.
-    destruct mz; simpl; intros ?.
-    - rewrite discrete_fun_lookup_op.
-      apply (Hp x n (Some (c x))); simpl. rewrite -discrete_fun_lookup_op.
-      apply Hf.
-    - apply (Hp x n None); simpl. apply Hf.
-  Qed.
-End discrete_fun.
-
+(* TODO: upstream *)
+Global Instance discrete_fun_core_id {A} {B : A → ucmra} (f : discrete_fun B) :
+  (∀ i, CoreId (f i)) → CoreId f.
+Proof. intros ?. constructor => x. by apply core_id_total. Qed.
+Global Hint Extern 100 (CoreId (match ?x with _ => _ end)) =>
+  destruct x : typeclass_instances.
 
 Definition mono_natsR : cmra :=
-  discrete_funR (λ (_ : positive), mono_natUR).
+  positive -d> mono_natUR.
 
 Definition to_mono_nats_auth (E : coPset) (f : Qp) (n : nat) : mono_natsR :=
-  λ k, if bool_decide (k ∈ E) then mono_nat_auth (DfracOwn f) n else mono_nat_lb 0.
+  λ k, if bool_decide (k ∈ E) then ●MN{#f} n else ◯MN 0.
 
 Definition to_mono_nats_lb (E : coPset) (n : nat) : mono_natsR :=
-  λ k, if bool_decide (k ∈ E) then mono_nat_lb n else mono_nat_lb 0.
+  λ k, if bool_decide (k ∈ E) then ◯MN n else ◯MN 0.
 
 Section mono_natsR.
+
+  Global Instance to_mono_nats_auth_discrete E f n : Discrete (to_mono_nats_auth E f n).
+  Proof. apply _. Qed.
+
+  Global Instance to_mono_nats_lb_core_id E n : CoreId (to_mono_nats_lb E n).
+  Proof. rewrite /to_mono_nats_lb. apply _. Qed.
+
+  Global Instance to_mono_nats_lb_discrete E n : Discrete (to_mono_nats_lb E n).
+  Proof. apply _. Qed.
+
   Lemma to_mono_nats_auth_lookup k E q a :
-    k ∈ E → to_mono_nats_auth E q a k = mono_nat_auth (DfracOwn q) a.
+    k ∈ E → to_mono_nats_auth E q a k = ●MN{#q} a.
   Proof. intros. unfold to_mono_nats_auth. by rewrite bool_decide_eq_true_2. Qed.
 
   Lemma to_mono_nats_auth_lookup_None k E q a :
-    k ∉ E → to_mono_nats_auth E q a k = mono_nat_lb 0.
+    k ∉ E → to_mono_nats_auth E q a k = ◯MN 0.
   Proof. intros. unfold to_mono_nats_auth. by rewrite bool_decide_eq_false_2. Qed.
 
   Lemma to_mono_nats_lb_lookup k E a :
-    k ∈ E → to_mono_nats_lb E a k = mono_nat_lb a.
+    k ∈ E → to_mono_nats_lb E a k = ◯MN a.
   Proof. intros. unfold to_mono_nats_lb. by rewrite bool_decide_eq_true_2. Qed.
 
   Lemma to_mono_nats_lb_lookup_None k E a :
-    k ∉ E → to_mono_nats_lb E a k = mono_nat_lb 0.
+    k ∉ E → to_mono_nats_lb E a k = ◯MN 0.
   Proof. intros. unfold to_mono_nats_lb. by rewrite bool_decide_eq_false_2. Qed.
 
   Lemma to_mono_nats_auth_union E1 E2 q a :
@@ -90,9 +92,9 @@ Section mono_natsR.
   Proof.
     intros x. rewrite discrete_fun_lookup_op.
     destruct (decide (x ∈ E)).
-    - repeat rewrite to_mono_nats_auth_lookup; auto.
+    - rewrite !to_mono_nats_auth_lookup //.
       rewrite -mono_nat_auth_dfrac_op //.
-    - by repeat rewrite to_mono_nats_auth_lookup_None.
+    - by rewrite !to_mono_nats_auth_lookup_None.
   Qed.
 
   Lemma to_mono_nats_auth_op E1 E2 a1 q1 a2 q2 :
@@ -150,17 +152,17 @@ Proof. solve_inG. Qed.
 Section mono_nats_def.
   Context `{!mono_natsG Σ}.
 
-  Definition mono_nats_auth_def (γ : gname) (E : coPset) (f : Qp) (n : nat) : iProp Σ :=
+  Local Definition mono_nats_auth_def (γ : gname) (E : coPset) (f : Qp) (n : nat) : iProp Σ :=
     own γ (to_mono_nats_auth E f n).
-  Definition mono_nats_auth_aux : seal (@mono_nats_auth_def). Proof. by eexists. Qed.
+  Local Definition mono_nats_auth_aux : seal (@mono_nats_auth_def). Proof. by eexists. Qed.
   Definition mono_nats_auth := mono_nats_auth_aux.(unseal).
-  Definition mono_nats_auth_unseal : @mono_nats_auth = @mono_nats_auth_def := mono_nats_auth_aux.(seal_eq).
+  Local Definition mono_nats_auth_unseal : @mono_nats_auth = @mono_nats_auth_def := mono_nats_auth_aux.(seal_eq).
 
-  Definition mono_nats_lb_def (γ : gname) (E : coPset) (n : nat) : iProp Σ :=
+  Local Definition mono_nats_lb_def (γ : gname) (E : coPset) (n : nat) : iProp Σ :=
     own γ (to_mono_nats_lb E n).
-  Definition mono_nats_lb_aux : seal (@mono_nats_lb_def). Proof. by eexists. Qed.
+  Local Definition mono_nats_lb_aux : seal (@mono_nats_lb_def). Proof. by eexists. Qed.
   Definition mono_nats_lb := mono_nats_lb_aux.(unseal).
-  Definition mono_nats_lb_unseal : @mono_nats_lb = @mono_nats_lb_def := mono_nats_lb_aux.(seal_eq).
+  Local Definition mono_nats_lb_unseal : @mono_nats_lb = @mono_nats_lb_def := mono_nats_lb_aux.(seal_eq).
 End mono_nats_def.
 
 Section mono_nats_rules.
@@ -177,12 +179,7 @@ Section mono_nats_rules.
   Global Instance mono_nats_lb_timeless γ E n : Timeless (mono_nats_lb γ E n).
   Proof. unseal. apply _. Qed.
   Global Instance mono_nats_lb_persistent γ E n : Persistent (mono_nats_lb γ E n).
-  Proof.
-      unseal. apply own_core_persistent. constructor => k.
-      case (decide (k ∈ E)) => Hk.
-      - rewrite to_mono_nats_lb_lookup //.
-      - rewrite to_mono_nats_lb_lookup_None //.
-  Qed.
+  Proof. unseal. apply _. Qed.
 
   Global Instance mono_nats_auth_fractional γ E n :
     Fractional (λ q, mono_nats_auth γ E q n).
@@ -277,7 +274,7 @@ Section mono_nats_rules.
   Proof.
     unseal. iIntros (Hn) "A".
     rewrite -own_op. iMod (own_update with "A"); auto.
-    apply discrete_fun_update_pointwise; intros. rewrite discrete_fun_lookup_op.
+    apply discrete_fun_update=>x. rewrite discrete_fun_lookup_op.
     destruct (decide (x ∈ E)).
     - repeat rewrite to_mono_nats_auth_lookup; auto.
       rewrite to_mono_nats_lb_lookup; auto.

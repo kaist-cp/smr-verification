@@ -78,7 +78,7 @@ Lemma prefix_cut l1 l2 :
   l1 `prefix_of` l2 ↔ l2 = l1 ++ (drop (length l1) l2).
 Proof.
   split; intros PF.
-  - destruct PF as [? ->]. f_equal. by rewrite drop_app.
+  - destruct PF as [? ->]. f_equal. by rewrite drop_app_length.
   - by exists (drop (length l1) l2).
 Qed.
 
@@ -262,17 +262,17 @@ Proof.
   intro i'. destruct (decide (i' = i)) as [->|NE].
   - rewrite lookup_take; [|lia]. rewrite Hi.
     assert (i = length (take i l)) as Len.
-    { rewrite take_length_le; lia. }
+    { rewrite length_take_le; lia. }
     rewrite {1}Len snoc_lookup. done.
   - destruct (decide (i' < i)) as [Lt|].
     + rewrite lookup_take; last lia.
       rewrite lookup_app_l; last first.
-      { rewrite take_length_le; lia. }
+      { rewrite length_take_le; lia. }
       by rewrite lookup_take; last lia.
     + assert (i' > i) by lia.
       rewrite lookup_take_ge; last lia.
       rewrite lookup_ge_None_2; first done.
-      rewrite app_length Nat.add_1_r take_length_le; lia.
+      rewrite app_length Nat.add_1_r length_take_le; lia.
 Qed.
 
 Lemma take_prefix_le i j l :
@@ -313,18 +313,11 @@ Lemma set_map_difference {A B C D}
   set_map (D:=D) f (X ∖ Y) ≡ set_map (D:=D) f X ∖ set_map (D:=D) f Y.
 Proof.
   split; intro ElemOf.
-  - rewrite elem_of_map in ElemOf.
-    destruct ElemOf as [y [-> ElemOf]].
-    rewrite elem_of_difference in ElemOf.
-    destruct ElemOf as [ElemOf NotElemOf].
+  - apply elem_of_map in ElemOf as [y [-> [ElemOf NotElemOf]%elem_of_difference]].
     rewrite elem_of_difference; split.
     + apply elem_of_map. eauto.
-    + intro FElemOf. apply elem_of_map in FElemOf.
-      destruct FElemOf as [y' [EQ FElemOf]].
-      apply (inj _) in EQ. subst y'. congruence.
-  - rewrite elem_of_difference in ElemOf.
-    destruct ElemOf as [ElemOf NotElemOf].
-    rewrite elem_of_map in ElemOf. destruct ElemOf as [y [-> ElemOf]].
+    + by intros [? [<-%(inj _) FElemOf]]%elem_of_map.
+  - apply elem_of_difference in ElemOf as [[y [-> ElemOf]]%elem_of_map NotElemOf].
     rewrite elem_of_map. exists y; split; auto.
     rewrite elem_of_difference; split; auto.
     intro ElemOf'. apply NotElemOf. rewrite elem_of_map; eauto.
@@ -337,17 +330,22 @@ Lemma set_map_difference_L {A B C D}
 Proof. unfold_leibniz. by apply set_map_difference. Qed.
 
 Lemma set_map_empty_iff {A B C D}
-  `{Set_ B D, FinSet A C, !LeibnizEquiv D, !LeibnizEquiv C}
-    (f : A → B) `{!Inj (=) (=) f} (X : C) :
-  set_map (D:=D) f X = ∅ ↔ X = ∅.
+  `{Set_ B D, FinSet A C}
+    (f : A → B) (X : C) :
+  set_map (D:=D) f X ≡ ∅ ↔ X ≡ ∅.
 Proof.
   split.
-  - intro EqMap. rewrite elem_of_equiv_empty_L in EqMap.
-    rewrite elem_of_equiv_empty_L. intros x In.
-    specialize (EqMap (f x)). destruct EqMap.
-    by apply (elem_of_map_2).
+  - rewrite !elem_of_equiv_empty.
+    intros EqMap x In.
+    apply (EqMap (f x)), elem_of_map_2, In.
   - intros ->. by rewrite set_map_empty.
 Qed.
+
+Lemma set_map_empty_iff_L {A B C D}
+  `{Set_ B D, FinSet A C, !LeibnizEquiv D, !LeibnizEquiv C}
+    (f : A → B) (X : C) :
+  set_map (D:=D) f X = ∅ ↔ X = ∅.
+Proof. unfold_leibniz. by apply set_map_empty_iff. Qed.
 
 Lemma subset_of_singleton x (X : gset nat) :
   X ⊆ {[x]} → X = ∅ ∨ X = {[x]}.
@@ -493,8 +491,7 @@ Lemma top_disjoint_gset_to_coPset X :
   (⊤ ## (gset_to_coPset X)) → False.
 Proof.
   intros NotEmpty Disj.
-  apply NotEmpty. rewrite elem_of_equiv_empty_L. intro x.
-  intro ElemOf.
+  apply NotEmpty. rewrite elem_of_equiv_empty_L=> x ElemOf.
   rewrite elem_of_disjoint in Disj. apply (Disj x); [done|by rewrite elem_of_gset_to_coPset].
 Qed.
 
@@ -553,7 +550,7 @@ Section circular_list.
   Proof. intros H. by apply lookup_lt_is_Some, Nat.mod_upper_bound. Qed.
 
   Lemma mod_set_length l i v : length (mod_set l i v) = length l.
-  Proof. by rewrite insert_length. Qed.
+  Proof. by rewrite length_insert. Qed.
 
   Lemma mod_set_get l i j v :
     length l ≠ 0 →
@@ -561,7 +558,7 @@ Section circular_list.
     mod_get (mod_set l i v) j = Some v.
   Proof.
     intros H Hij. unfold mod_get, mod_set.
-    rewrite insert_length Hij list_lookup_insert; auto.
+    rewrite length_insert Hij list_lookup_insert; auto.
     by apply Nat.mod_upper_bound.
   Qed.
 
@@ -570,7 +567,7 @@ Section circular_list.
     mod_get (mod_set l i v) j = mod_get l j.
   Proof.
     intros Hij. unfold mod_get, mod_set.
-    by rewrite insert_length list_lookup_insert_ne.
+    by rewrite length_insert list_lookup_insert_ne.
   Qed.
 
   (* slice *)
@@ -695,4 +692,3 @@ Section circular_list.
     by rewrite Hi.
   Qed.
 End circular_list.
-
