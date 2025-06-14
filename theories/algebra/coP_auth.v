@@ -11,9 +11,9 @@ Definition coP_authUR (A : cmra) : ucmra :=
   authUR (optionUR (prodR coPneset_disjR A)).
 
 Definition coP_auth_auth {A : cmra} (x : A) : coP_authR A :=
-  ● (Some ((CoPNESetDisj ⊤),x)).
+  ● (Some (CoPNESetDisj ⊤,x)).
 Definition coP_auth_frag {A : cmra} (E : coPneset) (x : A) : coP_authR A :=
-  ◯ (Some ((CoPNESetDisj E),x)).
+  ◯ (Some (CoPNESetDisj E,x)).
 
 #[export] Typeclasses Opaque coP_auth_auth coP_auth_frag.
 
@@ -86,16 +86,10 @@ Section coP_auth.
     rewrite Some_validN pair_validN.
     split; intros.
     - destruct H. auto.
-    - split; auto. apply coPneset_disj_validN.
+    - split; auto. apply cmra_discrete_valid_iff, coPneset_disj_valid.
   Qed.
   Lemma coP_auth_frag_valid E a : ✓ (◯C{E} a) ↔ ✓ a.
-  Proof.
-    rewrite /coP_auth_frag auth_frag_valid.
-    rewrite Some_valid pair_valid.
-    split; intros.
-    - destruct H. auto.
-    - split; auto. apply coPneset_disj_valid.
-  Qed.
+  Proof. rewrite !cmra_valid_validN. by setoid_rewrite coP_auth_frag_validN. Qed.
 
   Lemma coP_auth_frag_op E1 E2 a1 a2 :
     E1 ## E2 → ◯C{E1 ∪ E2} (a1 ⋅ a2) ≡ ◯C{E1} a1 ⋅ ◯C{E2} a2.
@@ -108,7 +102,7 @@ Section coP_auth.
   Proof.
     rewrite -auth_frag_op -Some_op -pair_op.
     rewrite auth_frag_validN Some_validN pair_validN.
-    by rewrite coPneset_disj_validN_op.
+    by rewrite -cmra_discrete_valid_iff coPneset_disj_valid_op.
   Qed.
   Lemma coP_auth_frag_valid_op E1 E2 a1 a2 :
     ✓ (◯C{E1} a1 ⋅ ◯C{E2} a2) ↔ E1 ## E2 ∧ ✓ (a1 ⋅ a2).

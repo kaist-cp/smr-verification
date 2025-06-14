@@ -60,7 +60,7 @@ Implicit Types
 Important ghosts
 * A guard at e asserts this flag, meaning that it is validated with epoch e.
   ```
-  (sid e,sid idx) ↦P2[γV]{ 1/2/2 } true
+  (sid e,sid idx) ↦P2[γV] {# 1/2/2 } true
   ```
   (Remaining 1/2 in GE_minus, 1/2/2 in SlotInfos)
   (Here, sid doesn't mean anything. It's just injection from nat to positive.)
@@ -98,7 +98,7 @@ Proof summary
     * take all tokens that are not in the snapshot
     * set the γV flag and take epoch ownership (retiring at e; advancement from e+1 → e+2)
 * Guard-Protect
-    1. BaseManaged of `i` has `{i} ↪[U]{1/2} false`
+    1. BaseManaged of `i` has `{i} ↪[U] {#1/2} false`
     2. auth unlink history doesn't contain it (∵ invariant 1)
     3. my history snapshot doesn't contain it (by monotonicity)
     4. I have token for it
@@ -117,8 +117,9 @@ Proof summary
 (* Ghosts for finalized epochs 0..=(ge-2) *)
 Definition GE_minus_2_et_al γV γeh ge slist : iProp :=
   (* NOTE: We will throw away [γV] for ({[1]}, ⊤) *)
+  (* NOTE: these can also be persistent. *)
   (sids_to (ge-1),sids_from (length slist)) ↦P2[γV] false ∗
-  (sids_to (ge-1),sids_to (length slist)) ↦P2[γV]{ 1/2 } false ∗
+  (sids_to (ge-1),sids_to (length slist)) ↦P2[γV] {# 1/2 } false ∗
   [∗ list] e ∈ seq 0 (ge-1),
     epoch_history_frag γeh e ⊤.
 
@@ -128,7 +129,7 @@ Definition GE_minus γV γeh γe_nums e slist sbvmap : iProp :=
   epoch_history_frag γeh e (sids_from' (length slist)) ∗
   [∗ list] si ↦ slot ∈ slist, ∃ (b : bool) v (V : bool),
     ⌜ sbvmap !! slot = Some (b, v) ⌝ ∗
-    (sid e,sid si) ↦p2[γV]{ 1/2 } V ∗
+    (sid e,sid si) ↦p2[γV] {# 1/2 } V ∗
     ⌜ V → b = true ∧ v = Some e ⌝ ∗
     match V with
     | true => mono_nats_auth γe_nums {[sid si]} (1/2) e
@@ -143,8 +144,8 @@ Definition GE_minus γV γeh γe_nums e slist sbvmap : iProp :=
   (* active slots *)
   [∗ list] si ↦ slot ∈ slist, ∃ (b : bool) v (V_1 V_0 : bool),
     ⌜ sbvmap !! slot = Some (b, v) ⌝ ∗
-    (sid (ge-1), sid si) ↦p2[γV]{ 1/2 } V_1 ∗
-    (sid ge,     sid si) ↦p2[γV]{ 1/2 } V_0 ∗
+    (sid (ge-1), sid si) ↦p2[γV] {# 1/2 } V_1 ∗
+    (sid ge,     sid si) ↦p2[γV] {# 1/2 } V_0 ∗
     match V_1, V_0 with
     | false, false => (* not active *)
         epoch_history_frag γeh (ge-1) {[sid si]} ∗
@@ -169,7 +170,7 @@ Definition GhostEpochInformations γV γeh γe_nums ge slist sbvmap : iProp :=
   GE_minus γV γeh γe_nums ge slist sbvmap ∗
   ([∗ list] si ↦ slot ∈ slist, ∃ (b : bool) v,
     ⌜ sbvmap !! slot = Some (b, v) ⌝) ∗
-  (sids_from (ge + 1),sids_to (length slist)) ↦P2[γV]{ 1/2 } false ∗
+  (sids_from (ge + 1),sids_to (length slist)) ↦P2[γV] {# 1/2 } false ∗
   (sids_from (ge + 1),sids_from (length slist)) ↦P2[γV] false.
 
 Global Instance ghost_epoch_informations_timeless γV γeh γe_nums ge slist sbvmap :
@@ -185,7 +186,10 @@ we write the new global epoch. *)
 Definition UnlinkFlags γU info ehist : iProp :=
   (⊤ ∖ gset_to_coPset (dom info)) ↦P[γU] false ∗
   [∗ map] i ↦ info_i ∈ info, ∃ (U : bool),
-    i ↦p[γU]{1/2} U ∗
+    (if U then
+      i ↦p[γU]□ true
+    else
+      i ↦p[γU] {#1/2} false) ∗
     let retired := fold_hist ehist in
     ⌜ U ↔ i ∈ retired ⌝
   .
@@ -200,15 +204,15 @@ Definition SlotInfos γV γtok γeh γe_nums slist sbvmap ehist (ge := length eh
     | Some (false, _) =>
       toks γtok (⊤ ∖ reclaimable) {[sid si]} ∗
       (* extra 1/2/2 for non-existent guard *)
-      (⊤,{[sid si]}) ↦P2[γV]{ 1/2 } false ∗
+      (⊤,{[sid si]}) ↦P2[γV] {# 1/2 } false ∗
       mono_nats_auth γe_nums {[sid si]} 1 ge
     | Some (true, None) =>
       toks γtok (⊤ ∖ reclaimable) {[sid si]} ∗
-      (⊤,{[sid si]}) ↦P2[γV]{ 1/2/2 } false ∗
+      (⊤,{[sid si]}) ↦P2[γV] {# 1/2/2 } false ∗
       mono_nats_auth γe_nums {[sid si]} 1 ge
     | Some (true, Some e) => ∃ (V : bool),
-      (⊤ ∖ {[sid e]},{[sid si]}) ↦P2[γV]{ 1/2/2 } false ∗
-      (sid e,sid si) ↦p2[γV]{ 1/2/2 } V ∗
+      (⊤ ∖ {[sid e]},{[sid si]}) ↦P2[γV] {# 1/2/2 } false ∗
+      (sid e,sid si) ↦p2[γV] {# 1/2/2 } V ∗
       if V then ∃ ehistF,
         ⌜length ehistF = e - 1⌝ ∗
         epoch_history_finalized γeh ehistF ∗
@@ -229,8 +233,8 @@ Definition ReclaimInfo γR γtok ehist info (ge := length ehist - 1): iProp :=
   ∃ reclaimed,
   (* 0..=(ge-3) *)
   let reclaimable := gset_to_coPset (fold_hist (take (ge - 2) ehist)) in
-  (gset_to_coPset reclaimed,⊤) ↦P2[γR]{ 1/2 } true ∗
-  (gset_to_coPset (dom info ∖ reclaimed),⊤) ↦P2[γR]{ 1/2 } false ∗
+  (gset_to_coPset reclaimed,⊤) ↦P2[γR] {# 1/2 } true ∗
+  (gset_to_coPset (dom info ∖ reclaimed),⊤) ↦P2[γR] {# 1/2 } false ∗
   (⊤ ∖ gset_to_coPset (dom info),⊤) ↦P2[γR] false ∗
   toks γtok (reclaimable ∖ (gset_to_coPset reclaimed)) ⊤
   (* ⌜ reclaimed ⊆ reclaimable ⌝ *)
@@ -348,7 +352,7 @@ Definition BaseInactive γe (g : loc) : iProp :=
     (g +ₗ guardDom) ↦ #d ∗
     †g…guardSize ∗
     sbs.(Slot) γsb slot idx v ∗
-    (⊤,{[sid idx]}) ↦P2[γV]{ 1/2/2 } false.
+    (⊤,{[sid idx]}) ↦P2[γV] {# 1/2/2 } false.
 
 Definition BaseGuard γe γg (g : loc) Syn G : iProp :=
   ∃ γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums
@@ -362,8 +366,8 @@ Definition BaseGuard γe γg (g : loc) Syn G : iProp :=
       ⌜v = Some e⌝ ∗
       mono_nats_auth γe_nums {[sid idx]} (1/2/2) e ∗
 
-      (sid e,sid idx) ↦p2[γV]{ 1/2/2 } true ∗
-      (⊤∖{[sid e]},{[sid idx]}) ↦P2[γV]{ 1/2/2 } false ∗
+      (sid e,sid idx) ↦p2[γV] {# 1/2/2 } true ∗
+      (⊤∖{[sid e]},{[sid idx]}) ↦P2[γV] {# 1/2/2 } false ∗
       epoch_history_frag γeh e {[sid idx]} ∗
 
       let finalized := fold_hist ehistF in
@@ -373,6 +377,7 @@ Definition BaseGuard γe γg (g : loc) Syn G : iProp :=
       epoch_history_finalized γeh ehistF ∗
       toks γtok ((⊤ ∖ (gset_to_coPset finalized)) ∖ (gset_to_coPset (range G))) {[sid idx]} ∗
       ⌜(range G) ## finalized⌝ ∗
+      ([∗ set] i_p ∈ Syn, i_p ↦p[γU]□ true) ∗
       [∗ map] p ↦ i_p ∈ G,
         p ↪[γg]□ i_p ∗
         Protected γtok γinfo γptrs idx i_p p
@@ -413,21 +418,22 @@ Proof.
   by iApply big_sepM_empty.
 Qed.
 
-Lemma UnlinkFlags_lookup i info γU q (U : bool) ehist :
+Lemma UnlinkFlags_lookup i info γU dq (U : bool) ehist :
   i ∈ dom info →
-  i ↦p[γU]{q} U -∗ UnlinkFlags γU info ehist -∗
+  i ↦p[γU] { dq }  U -∗ UnlinkFlags γU info ehist -∗
   let retired := fold_hist ehist in
   ⌜ U ↔ i ∈ retired ⌝.
 Proof.
   intros [? ElemOf]%elem_of_dom. iIntros "γU_i [_ γU]".
   rewrite big_sepM_delete; last done.
-  iDestruct "γU" as "[[% [γU %]] _]".
-  by iDestruct (ghost_vars_agree with "γU_i γU") as %<-; [set_solver|].
+  iDestruct "γU" as "[[%U' [γU %]] _]".
+  destruct U';
+  iDestruct (ghost_vars_agree with "γU_i γU") as %?; subst; by set_solver.
 Qed.
 
-Lemma UnlinkFlags_lookup_false i info γU q ehist :
+Lemma UnlinkFlags_lookup_false i info γU dq ehist :
   i ∈ dom info →
-  i ↦p[γU]{q} false -∗ UnlinkFlags γU info ehist -∗
+  i ↦p[γU] { dq } false -∗ UnlinkFlags γU info ehist -∗
   let retired := fold_hist ehist in
   ⌜ i ∉ retired ⌝.
 Proof.
@@ -436,9 +442,9 @@ Proof.
   destruct Hi as [_ Hi]. auto.
 Qed.
 
-Lemma UnlinkFlags_lookup_true i info γU q ehist :
+Lemma UnlinkFlags_lookup_true i info γU dq ehist :
   i ∈ dom info →
-  i ↦p[γU]{q} true -∗ UnlinkFlags γU info ehist -∗
+  i ↦p[γU] { dq } true -∗ UnlinkFlags γU info ehist -∗
   let retired := fold_hist ehist in
   ⌜ i ∈ retired ⌝.
 Proof.
@@ -467,7 +473,7 @@ Lemma UnlinkFlags_update_notin γU γc_i info ehist i p k :
   i ∉ fold_hist ehist →
   UnlinkFlags γU info ehist -∗
   UnlinkFlags γU (<[i:=({| addr := p; len := k |}, γc_i)]> info) ehist ∗
-  i ↦p[γU]{1/2} false.
+  i ↦p[γU] {#1/2} false.
 Proof.
   iIntros (Hi Hfe) "[U_rest U_info]".
   unfold UnlinkFlags. rewrite dom_insert_L.
@@ -524,7 +530,7 @@ Lemma ghost_epoch_informations_new_slot slot γV γeh γe_nums ge slist sbvmap
   sbvmap !! slot = None →
   GhostEpochInformations γV γeh γe_nums ge slist sbvmap -∗
   GhostEpochInformations γV γeh γe_nums ge (slist ++ [slot]) (<[slot:=(true, None)]> sbvmap) ∗
-  (⊤,{[sid idx]}) ↦P2[γV]{ 1/2 } false.
+  (⊤,{[sid idx]}) ↦P2[γV] {# 1/2 } false.
 Proof.
   iIntros (LE3 Fresh) "EInfo".
   iDestruct "EInfo" as "(GE_2_et_al & GE_1 & GE_0 & #slist & γV_to & γV_from)".
@@ -539,7 +545,7 @@ Proof.
   rewrite -ghost_vars2_union_2; [|apply sids_to_sid_disjoint;lia].
   iFrame.
   iAssert (GE_minus_2_et_al γV γeh ge (slist ++ [slot])
-    ∗ (sids_to (ge -1),{[sid idx]}) ↦P2[γV]{ 1/2 } false)%I
+    ∗ (sids_to (ge -1),{[sid idx]}) ↦P2[γV] {# 1/2 } false)%I
     with "[GE_2_et_al]" as "[$ γV_2_et_al]".
   { iDestruct "GE_2_et_al" as "(γV_from & γV_to & $)".
     rewrite !length_app !Nat.add_1_r !(sids_from_S (length slist)).
@@ -552,7 +558,7 @@ Proof.
   iAssert(∀ e,
     GE_minus γV γeh γe_nums e slist sbvmap -∗
     GE_minus γV γeh γe_nums e (slist ++ [slot]) (<[slot:=(true, None)]> sbvmap)
-    ∗ (sid e,sid idx) ↦p2[γV]{ 1/2 } false)%I
+    ∗ (sid e,sid idx) ↦p2[γV] {# 1/2 } false)%I
     as "GE_update".
   { iIntros (e) "GE_minus". unfold GE_minus.
     iDestruct "GE_minus" as "(γV & ◯ehist & slist_info)".
@@ -592,17 +598,17 @@ Lemma ghost_epoch_informations_set idx slot v b v' b' γeh γtok γV γe_nums ge
   slist !! idx = Some slot →
   sbvmap !! slot = Some (b',v') →
   GhostEpochInformations γV γeh γe_nums ge slist sbvmap -∗
-  (⊤,{[sid idx]}) ↦P2[γV]{ 1/2/2 } false -∗
+  (⊤,{[sid idx]}) ↦P2[γV] {# 1/2/2 } false -∗
   GhostEpochInformations γV γeh γe_nums ge slist (<[slot:=(b,v)]> sbvmap) ∗
-  (⊤,{[sid idx]}) ↦P2[γV]{ 1/2/2 } false.
+  (⊤,{[sid idx]}) ↦P2[γV] {# 1/2/2 } false.
 Proof.
   iIntros (ND Hidx Hslot) "GEI ●VTI".
     iDestruct "GEI" as "(GE2 & GE1 & GE0 & #sbvmap & γV_to & γV_from)".
 
   iAssert (∀ e,
-    (⊤,{[sid idx]}) ↦P2[γV]{ 1/2/2 } false -∗
+    (⊤,{[sid idx]}) ↦P2[γV] {# 1/2/2 } false -∗
     GE_minus γV γeh γe_nums e slist sbvmap -∗
-    (⊤,{[sid idx]}) ↦P2[γV]{ 1/2/2 } false ∗
+    (⊤,{[sid idx]}) ↦P2[γV] {# 1/2/2 } false ∗
     GE_minus γV γeh γe_nums e slist (<[slot:=(b, v)]> sbvmap)
   )%I as "GEupd".
   { iIntros (e) "●VTI GE".
@@ -647,13 +653,13 @@ Lemma ghost_epoch_informations_slot_infos_activate idx slot γeh γtok γV γe_n
 
   GhostEpochInformations γV γeh γe_nums ge slist sbvmap -∗
   SlotInfos γV γtok γeh γe_nums slist sbvmap ehist -∗
-  (⊤,{[sid idx]}) ↦P2[γV]{ 1/2/2 } false -∗
+  (⊤,{[sid idx]}) ↦P2[γV] {# 1/2/2 } false -∗
   epoch_history_finalized γeh ehistF
   ==∗
   GhostEpochInformations γV γeh γe_nums ge slist sbvmap ∗
   SlotInfos γV γtok γeh γe_nums slist sbvmap ehist ∗
-  (⊤ ∖ {[sid ge]},{[sid idx]}) ↦P2[γV]{ 1/2/2 } false ∗
-  (sid ge,sid idx) ↦p2[γV]{ 1/2/2 } true ∗
+  (⊤ ∖ {[sid ge]},{[sid idx]}) ↦P2[γV] {# 1/2/2 } false ∗
+  (sid ge,sid idx) ↦p2[γV] {# 1/2/2 } true ∗
   epoch_history_frag γeh ge {[sid idx]} ∗
   (* (1/2) for GEI. (1/2/2) for SlotInfos. This is for Guard *)
   mono_nats_auth γe_nums {[sid idx]} (1/2/2) ge ∗
@@ -723,8 +729,8 @@ Lemma ghost_epoch_informations_slot_infos_deactivate
 
   GhostEpochInformations γV γeh γe_nums ge slist sbvmap -∗
   SlotInfos γV γtok γeh γe_nums slist sbvmap ehist -∗
-  (⊤ ∖ {[sid e]},{[sid idx]}) ↦P2[γV]{ 1/2/2 } false -∗
-  (sid e,sid idx) ↦p2[γV]{ 1/2/2 } true -∗
+  (⊤ ∖ {[sid e]},{[sid idx]}) ↦P2[γV] {# 1/2/2 } false -∗
+  (sid e,sid idx) ↦p2[γV] {# 1/2/2 } true -∗
   epoch_history_frag γeh e {[sid idx]} -∗
   (* (1/2) for GEI. (1/2/2) for SlotInfos. This is for Guard *)
   mono_nats_auth γe_nums {[sid idx]} (1/2/2) e -∗
@@ -733,7 +739,7 @@ Lemma ghost_epoch_informations_slot_infos_deactivate
   ==∗
   GhostEpochInformations γV γeh γe_nums ge slist sbvmap ∗
   SlotInfos γV γtok γeh γe_nums slist sbvmap ehist ∗
-  (⊤,{[sid idx]}) ↦P2[γV]{ 1/2/2 } false
+  (⊤,{[sid idx]}) ↦P2[γV] {# 1/2/2 } false
 .
 Proof.
   iIntros (Hle ND Hidx HlenF Hslot Hpref)
@@ -809,9 +815,9 @@ Qed.
 Lemma slot_infos_new_slot slot γV γtok γeh γe_nums slist sbvmap ge (idx := length slist) :
   sbvmap !! slot = None →
   SlotInfos γV γtok γeh γe_nums slist sbvmap ge -∗
-  (⊤,{[sid idx]}) ↦P2[γV]{ 1/2 } false -∗
+  (⊤,{[sid idx]}) ↦P2[γV] {# 1/2 } false -∗
   SlotInfos γV γtok γeh γe_nums (slist ++ [slot]) (<[slot:=(true,None)]> sbvmap) ge ∗
-  (⊤,{[sid idx]}) ↦P2[γV]{ 1/2/2 } false.
+  (⊤,{[sid idx]}) ↦P2[γV] {# 1/2/2 } false.
 Proof.
   iIntros (Fresh) "SInfo [$ γV]".
   iDestruct "SInfo" as "($ & ●γe_nums & ●toks & SInfo)".
@@ -834,7 +840,7 @@ Lemma slot_infos_reactivate_slot slot γV γtok γeh γe_nums slist sbvmap si ge
   sbvmap !! slot = Some (false, v') →
   SlotInfos γV γtok γeh γe_nums slist sbvmap ge -∗
   SlotInfos γV γtok γeh γe_nums slist (<[slot:= (true,None)]> sbvmap) ge ∗
-  (⊤,{[sid si]}) ↦P2[γV]{ 1/2/2 } false.
+  (⊤,{[sid si]}) ↦P2[γV] {# 1/2/2 } false.
 Proof.
   iIntros (NoDup Hsi Hslot) "SInfo".
   iDestruct "SInfo" as "($ & $ & $ & SInfo)".
@@ -871,9 +877,9 @@ Lemma slot_infos_set v γV γtok γeh γe_nums slist sbvmap si slot ehist (ge :=
   slist !! si = Some slot →
   sbvmap !! slot = Some (true, v') →
   SlotInfos γV γtok γeh γe_nums slist sbvmap ehist -∗
-  (⊤,{[sid si]}) ↦P2[γV]{ 1/2/2 } false -∗
+  (⊤,{[sid si]}) ↦P2[γV] {# 1/2/2 } false -∗
   SlotInfos γV γtok γeh γe_nums slist (<[slot:=(true, v)]> sbvmap) ehist ∗
-  (⊤,{[sid si]}) ↦P2[γV]{ 1/2/2 } false.
+  (⊤,{[sid si]}) ↦P2[γV] {# 1/2/2 } false.
 Proof.
   iIntros (ND Hi Hsl) "SI ●VTI".
     iDestruct "SI" as "(◯MT & ●ME & TTE & SI)".
@@ -881,8 +887,8 @@ Proof.
   set reclaimable := gset_to_coPset (fold_hist (take (ge-2) ehist)).
   iAssert (
     toks γtok (⊤ ∖ reclaimable) {[sid si]} ∗
-    (⊤,{[sid si]}) ↦P2[γV]{ 1/2/2 } false ∗
-    (⊤,{[sid si]}) ↦P2[γV]{ 1/2/2 } false ∗
+    (⊤,{[sid si]}) ↦P2[γV] {# 1/2/2 } false ∗
+    (⊤,{[sid si]}) ↦P2[γV] {# 1/2/2 } false ∗
     mono_nats_auth γe_nums {[sid si]} 1 ge
   )%I with "[Si ●VTI]" as "(TTI & ●VTI & ●VTI' & ●MI)".
   { destruct v'; last iFrame.
@@ -914,7 +920,7 @@ Lemma slot_infos_unset v γV γtok γeh γe_nums slist sbvmap si slot ehist (ge 
   slist !! si = Some slot →
   sbvmap !! slot = Some (true, v') →
   SlotInfos γV γtok γeh γe_nums slist sbvmap ehist -∗
-  (⊤,{[sid si]}) ↦P2[γV]{ 1/2/2 } false -∗
+  (⊤,{[sid si]}) ↦P2[γV] {# 1/2/2 } false -∗
   SlotInfos γV γtok γeh γe_nums slist (<[slot:=(false, v)]> sbvmap) ehist.
 Proof.
   iIntros (ND Hi Hsl) "SI ●VTI".
@@ -923,8 +929,8 @@ Proof.
   set reclaimable := gset_to_coPset (fold_hist (take (ge-2) ehist)).
   iAssert (
     toks γtok (⊤ ∖ reclaimable) {[sid si]} ∗
-    (⊤,{[sid si]}) ↦P2[γV]{ 1/2/2 } false ∗
-    (⊤,{[sid si]}) ↦P2[γV]{ 1/2/2 } false ∗
+    (⊤,{[sid si]}) ↦P2[γV] {# 1/2/2 } false ∗
+    (⊤,{[sid si]}) ↦P2[γV] {# 1/2/2 } false ∗
     mono_nats_auth γe_nums {[sid si]} 1 ge
   )%I with "[Si ●VTI]" as "(TTI & ●VTI & ●VTI' & ●MI)".
   { destruct v'; last iFrame.
@@ -1144,7 +1150,7 @@ Proof.
 
   (* Update [Recl] *)
   iAssert (ReclaimInfo γR γtok ehist (<[i:=({| addr := p; len := length lv |}, γc_i)]> info) ∗
-    ({[i]},⊤) ↦P2[γR]{ 1/2 } false
+    ({[i]},⊤) ↦P2[γR] {# 1/2 } false
     )%I with "[Recl]" as "[Recl γR]".
   { iDestruct "Recl" as (reclaimed) "(γR_recl & γR_alive & γR_not_created & toks)".
     unfold ReclaimInfo. rewrite bi.sep_exist_r.
@@ -1170,10 +1176,10 @@ Proof.
     rewrite gset_to_coPset_union !gset_to_coPset_singleton. iFrame.
   }
 
-  iAssert (|==> Exchanges' _ _ _ _ _)%I with "[●γc_i p↪i]" as ">Exchanges'".
+  iAssert (Exchanges' _ _ _ _ _)%I with "[> ●γc_i p↪i]" as "Exchanges'".
   { unfold Exchanges'. iRight. iLeft.
-    iExists ∅. rewrite union_empty_l_L. rewrite set_map_empty. iFrame.
-    rewrite gset_to_coPset_empty. iApply token2_get_empty_2. }
+    iExists ∅. rewrite union_empty_l_L set_map_empty gset_to_coPset_empty.
+    iFrame. iApply token2_get_empty_2. }
   (* Make [Exchanges] *)
   iMod (inv_alloc (exchN mgmtN p i) _ (Exchanges' _ _ _ _ _) with "Exchanges'") as "#Exchanges".
 
@@ -1216,7 +1222,7 @@ Proof.
   iIntros "#IED" (Φ) "!> _ HΦ".
   iDestruct "IED" as (??????????) "(%&%& %Hγe & #d.l↦ & #d.r↦ & IED)".
 
-  wp_lam. wp_pures. wp_load. wp_pures.
+  wp_lam. wp_load. wp_pures.
 
   awp_apply sbs.(slot_bag_acquire_slot_spec).
   iInv "IED" as (info ptrs sbvmap slist rL ehist)
@@ -1226,7 +1232,7 @@ Proof.
   iIntros (slist' slot idx) "(SB & S & %Hslist')".
 
   (* Spec for common parts *)
-  iAssert((⊤,{[sid idx]}) ↦P2[γV]{ 1/2/2 } false -∗
+  iAssert((⊤,{[sid idx]}) ↦P2[γV] {# 1/2/2 } false -∗
     (∀ g: loc, BaseInactive γe g -∗ Φ #g) -∗
     WP let: "guard" := AllocN #2 #0 in
         "guard" +ₗ #guardSlot <- #slot;;
@@ -1285,7 +1291,7 @@ Proof.
   wp_let.
   iAssert(∀ (e : nat) (v : option nat),
   {{{ sbs.(Slot) γsb slot idx v ∗
-      (⊤,{[sid idx]}) ↦P2[γV]{ 1/2/2 } false }}}
+      (⊤,{[sid idx]}) ↦P2[γV] {# 1/2/2 } false }}}
       activate_loop # slot #d #e @ E
   {{{ ge ehistF, RET #();
       sbs.(Slot) γsb slot idx (Some ge) ∗
@@ -1293,10 +1299,11 @@ Proof.
       ⌜ length ehistF = ge -1 ⌝ ∗
       epoch_history_finalized γeh ehistF ∗
       let retired := gset_to_coPset (fold_hist ehistF) in
-      (sid ge,sid idx) ↦p2[γV]{ 1/2/2 } true ∗
-      (⊤ ∖ {[sid ge]},{[sid idx]}) ↦P2[γV]{ 1/2/2 } false ∗
+      (sid ge,sid idx) ↦p2[γV] {# 1/2/2 } true ∗
+      (⊤ ∖ {[sid ge]},{[sid idx]}) ↦P2[γV] {# 1/2/2 } false ∗
       toks γtok (⊤ ∖ retired) {[sid idx]} ∗
-      mono_nats_auth γe_nums {[sid idx]} (1/2/2) ge
+      mono_nats_auth γe_nums {[sid idx]} (1/2/2) ge ∗
+      [∗ set] i_p ∈ fold_hist ehistF, i_p ↦p[γU]□ true
     }}}
     )%I as "activate_loop".
   { (* Activate guard [s] at epoch [e]. *)
@@ -1335,8 +1342,20 @@ Proof.
       assert (length ehistF = ge - 1).
       { unfold ge, ehistF. rewrite length_take. lia. }
       (* Update nessecary [ghost_vars2 γV] by syncing with EInfo. *)
-      iMod (ghost_epoch_informations_slot_infos_activate with "EInfo SInfo γV ◯ehist_fin") as "H"; [try done..|].
-      iDestruct "H" as "(EInfo & SInfo & γV_not_ge & γV_ge & ◯ehist_ge & ●γe_nums_idx & toks)".
+      iMod (ghost_epoch_informations_slot_infos_activate with "EInfo SInfo γV ◯ehist_fin")
+        as "(EInfo & SInfo & γV_not_ge & γV_ge & ◯ehist_ge & ●γe_nums_idx & toks)"; [done..|].
+
+      iAssert ([∗ set] i_p ∈ fold_hist ehistF, i_p ↦p[γU]□ true)%I with "[γU]" as "#Syn".
+      { clear -Hdom_i. iDestruct "γU" as "[_ γU]".
+        iEval (rewrite big_sepM_dom) in "γU".
+        assert (fold_hist ehistF ⊆ fold_hist ehist) as Hehist_subset.
+        { apply fold_hist_prefix, prefix_take. }
+        iDestruct (big_sepS_subseteq _ _ (fold_hist ehistF) with "γU") as "γU".
+        { etransitivity; [apply Hehist_subset|apply Hdom_i]. }
+        iApply (big_sepS_mono with "γU").
+        iIntros (i_p Hi_p) "[%U [γU %HU]]".
+        destruct U; [done|set_solver].
+      }
       iModIntro.
       iSplitL "info ptrs ehist ret SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
       { iFrame "∗#%". }
@@ -1351,7 +1370,7 @@ Proof.
   }
   iMod ghost_map_alloc_empty as (γg) "I".
   wp_apply ("activate_loop" with "[$S $γV]")
-    as (ge ehistF) "(S & ehist & % & #◯ehistF & γV_true & γV_false & toks & ◯γe_nums)".
+    as (ge ehistF) "(S & ehist & % & #◯ehistF & γV_true & γV_false & toks & ◯γe_nums & #Syn)".
   iApply "HΦ". iFrame "∗#%".
   rewrite range_empty gset_to_coPset_empty difference_empty_L big_sepM_empty.
   iFrame "∗#%". done.
@@ -1365,7 +1384,7 @@ Proof.
     iDestruct "G" as (??????????)
       "(%&%&%&%& %Hγe & _ & _ & _ & _ & γV)".
     iDestruct "γV" as (e ehist_fin ->)
-      "(_ & _ & _ & _ & I & _ & _ & _ & _ & Prot)".
+      "(_ & _ & _ & _ & I & _ & _ & _ & _ & _ & Prot)".
     iDestruct "M" as (??????????)
       "(%&%&% & _ & _ & p2↪ & _)".
   encode_agree Hγe.
@@ -1378,113 +1397,26 @@ Proof.
   by iDestruct (coP_ghost_map_elem_agree with "p1↪ p2↪") as %->.
 Qed.
 
-(* 1. BaseManaged of `i` has `{i} ↪[U]{1/2} false`
+(* 1. BaseManaged of `i` has `{i} ↪[U] {#1/2} false`
    2. auth unlink history doesn't contain it (∵ invariant 1)
    3. my history snapshot doesn't contain it (by monotonicity)
-   4. I have token for it *)
-Lemma guard_protect :
-  guard_protect' mgmtN ptrsN IsEBRDomain BaseManaged BaseGuard.
+   4. I have token for it
+   TODO: above description is mixed of notin_syn and protect_node_info.
+   *)
+Lemma guard_managed_notin_syn :
+  guard_managed_notin_syn' mgmtN ptrsN BaseManaged BaseGuard.
 Proof.
-  intros ????????????.
-  iDestruct 1 as (??????????) "#(% & % & %Hγe & d.rBag↦ & d.rSet↦ & IED)".
-  iDestruct 1 as (??????????) "(% & % & % & Gcinv & #◯info_i & γp_i & #Ex & #Cinv & γU_i & γR_i)".
+  intros ?????????.
+  iDestruct 1 as (??????????) "(% & %Hγe & % & Gcinv & #◯info_i & γp_i & #Ex & #Cinv & γU_i & γR_i)".
   iDestruct 1 as (??????????) "(% & % & % & % & % & g.slot↦ & g.dom↦ & †g & S & Act_st)".
-  iDestruct "Act_st" as (e ehist_fin ->) "(◯γe_nums & γV_true & γV_false & ◯ehist & I & [-> %Hehist_fin] & ◯ehist_fin & toks & %Disj & Prot)".
-  do 2 encode_agree Hγe.
+  iDestruct "Act_st" as (e ehist_fin ->) "(◯γe_nums & γV_true & γV_false & ◯ehist & I & [-> %Hehist_fin] & ◯ehist_fin & toks & %Disj & #Syn & Prot)".
+  encode_agree Hγe.
 
-  (* Check if it's already protected. *)
-  destruct (G !! p) as [i_p'|] eqn:HGp.
-  { (* Reuse the existing protection. *)
-    iModIntro.
-    iDestruct (big_sepM_insert_acc with "Prot") as "[[#p Prot_p] Prot]"; [exact HGp|].
-    iSpecialize ("Prot" $! i_p).
-    iDestruct "Prot_p" as (??) "(#◯info_i' & γp_i' & γc_i & #Ex')".
-    iDestruct (coP_ghost_map_elem_agree with "γp_i γp_i'") as %<-.
-    rewrite insert_id; [|done].
-    iDestruct (ghost_map_elem_agree with "◯info_i ◯info_i'") as %[= <- <-].
-    iSplitL "Gcinv γp_i γU_i γR_i".
-    { iFrame (Hγe) "∗#". }
-    iSplitL; [|iSplit;[|done]].
-    - iFrame (Hγe) "∗#".
-      repeat (iSplitR; [done|]).
-      iApply "Prot". iFrame "∗#".
-    - iPureIntro. assert (i_p ∈ range G); [|set_solver].
-      apply range_correct. eauto.
-  }
-
-  iInv "IED" as (info ptrs sbvmap slist rL ehist)
-      "(>info & >ptrs & >ehist & >ret & >SB & >RL & >EInfo & >SInfo & >γU & >%Hdom_i & >%Hehist & >d.ge↦ & >Reg & >Recl & Ret & >%HInfo & >%HPtrs)".
-
-  (* Get that [i_p] is not in unlinked history *)
-  iDestruct (ghost_map_lookup with "info ◯info_i") as %Hinfo_i.
-  apply (elem_of_dom_2 (D:= gset positive)) in Hinfo_i.
-  iDestruct (UnlinkFlags_lookup_false with "γU_i γU") as %NotIn; [done|].
-  iDestruct (epoch_history_finalized_lookup with "ehist ◯ehist_fin") as %NotIn_G; [done|].
-
-  (* Get that i_p ∉ range G. *)
-  iAssert (⌜i_p ∉ range G⌝)%I as %i_not_in_guarded.
-  { (* How: *)
-    (* 1. assume otherwise. *)
-    iIntros (IdInG). rewrite range_correct in IdInG.
-    (* 2. Then there is a p' s.t p' ↦ γ_p'; i ∈ G;  *)
-    destruct IdInG as [p' Hp_id'].
-    (* 3. Hence get [i ↪[γinfo]□ (p', γ_p', γc_i', size_i')] *)
-    iDestruct (big_sepM_lookup with "Prot") as "[_ (%&%& ◯info_i_p' & _)]"; [exact Hp_id'|].
-    (* 4. Then [p = p'], contradiction since [p ∉ dom G]. *)
-    iDestruct (ghost_map_elem_agree with "◯info_i ◯info_i_p'") as %[= <- <- <-].
-    iPureIntro. subst. rewrite HGp in Hp_id'. naive_solver.
-  }
-  (* Now split the token and validation flag from guard. *)
-  assert (i_p ∈ ⊤ ∖ gset_to_coPset (fold_hist ehist_fin) ∖ gset_to_coPset (range G)) as i_fresh.
-  { rewrite !elem_of_difference. split_and!; [done|rewrite elem_of_gset_to_coPset; done..]. }
-
-  iMod (ghost_map_insert_persist p i_p with "I") as "[I #p]"; [done|].
-
-  set G_new := <[p := i_p]> G.
-  assert (i_p ∈ range G_new).
-  { subst G_new. rewrite range_insert; [set_solver|done]. }
-
-  assert (⊤ ∖ gset_to_coPset (fold_hist ehist_fin) ∖ gset_to_coPset (range G)
-    = (⊤ ∖ gset_to_coPset (fold_hist ehist_fin) ∖ gset_to_coPset (range G_new) ∪ {[i_p]})) as ->.
-  { rewrite -!difference_union_difference.
-    rewrite difference_difference_r; [| |done]; last first.
-    { rewrite singleton_subseteq_l. apply elem_of_union_r.
-      rewrite elem_of_gset_to_coPset range_correct /G_new.
-      exists p. by simplify_map_eq.
-    }
-    f_equal. rewrite difference_union_distr_l_L.
-    rewrite -!gset_to_coPset_singleton -!gset_to_coPset_difference. repeat f_equal.
-    - set_solver.
-    - rewrite /G_new range_insert //.
-      rewrite difference_union_distr_l_L difference_diag_L union_empty_l_L.
-      rewrite -difference_not_in_singletion_L //.
-  }
-
-  rewrite /toks -token2_union_1; last first.
-  { rewrite disjoint_singleton_r elem_of_difference. intros [_ i_not_in_gid].
-    apply i_not_in_gid. rewrite elem_of_gset_to_coPset //.
-  }
-  iDestruct "toks" as "[toks toks_i]".
-  iDestruct (coP_ghost_map_lookup with "ptrs γp_i") as %Hptrs_p.
-
-  apply HInfo in Hptrs_p as [info_i [Hinfo_i_p <-]].
-  iMod (exchange_stok_give with "Ex toks_i") as "[zc cinv]"; [solve_ndisj|].
-
-  iModIntro. iSplitL "info ptrs ret ehist SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret".
-  { iFrame "∗#%". }
-  iModIntro. iSplitL "Gcinv γp_i γU_i γR_i".
-  { iFrame (Hγe) "∗#". }
-
-  iSplitL.
-  - iFrame (Hγe) "∗#".
-    repeat (iSplitR; [done|]).
-    subst G_new. iSplit; [iPureIntro|].
-    + rewrite range_insert // disjoint_union_l. set_solver.
-    + rewrite big_sepM_insert //. iFrame. iFrame "∗#%".
-  - iPureIntro. split; [done|]. by inversion 1.
+  iIntros (In). iDestruct (big_sepS_elem_of with "Syn") as "#γU_i'"; [exact In|].
+  iDestruct (ghost_vars_agree with "γU_i' γU_i") as %[= ?].
+  set_solver.
 Qed.
 
-(* TODO: stupid proof repetition. *)
 Lemma guard_protect_node_info :
   guard_protect_node_info' mgmtN ptrsN IsEBRDomain BaseGuard BaseNodeInfo BaseGuardedNodeInfo.
 Proof.
@@ -1493,7 +1425,7 @@ Proof.
   iDestruct 1 as (??????????) "(% & % & #Info)".
   iDestruct "Info" as (?) "(#◯info_i & Ex & CInv)".
   iDestruct 1 as (??????????) "(% & % & % & % & % & g.slot↦ & g.dom↦ & †g & S & Act_st)".
-  iDestruct "Act_st" as (e ehist_fin ->) "(◯γe_nums & γV_true & γV_false & ◯ehist & I & [-> %Hehist_fin] & ◯ehist_fin & toks & %Disj & Prot)".
+  iDestruct "Act_st" as (e ehist_fin ->) "(◯γe_nums & γV_true & γV_false & ◯ehist & I & [-> %Hehist_fin] & ◯ehist_fin & toks & %Disj & #Syn & Prot)".
   do 2 encode_agree Hγe.
 
   (* Check if it's already protected. *)
@@ -1603,7 +1535,7 @@ Proof.
   iIntros "#IED EBRAuth G".
   iDestruct "IED" as (??????????) "#(%&%& %Hγe & d.l↦ & d.r↦ & IED)".
   iDestruct "G" as (??????????) "(%&%&%&%& % & g.slot↦ & g.dom↦ & †g & S & Act_st)".
-  iDestruct "Act_st" as (e ehist_fin ->) "(◯γe_nums & γV_true & γV_false & ◯ehist & I & [-> %Hehist_fin] & ◯ehist_fin & toks & %Disj & Prot)".
+  iDestruct "Act_st" as (e ehist_fin ->) "(◯γe_nums & γV_true & γV_false & ◯ehist & I & [-> %Hehist_fin] & ◯ehist_fin & toks & %Disj & #Syn & Prot)".
   encode_agree Hγe.
 
   iInv "IED" as (info ptrs sbvmap slist rL ehist)
@@ -1630,7 +1562,7 @@ Proof.
   iIntros "[Info #p] G".
   iDestruct "Info" as (??????????) "(% & %Hγe & % & #i↪ & #Ex & #RCI)".
   iDestruct "G" as (??????????) "(%&%&%&%&% & g.slot↦ & g.dom↦ & †g & S & Act_st)".
-  iDestruct "Act_st" as (e ehist_fin ->) "(◯γe_nums & γV_true & γV_false & ◯ehist & I & [-> %Hehist_fin] & ◯ehist_fin & toks & %Disj & Prot)".
+  iDestruct "Act_st" as (e ehist_fin ->) "(◯γe_nums & γV_true & γV_false & ◯ehist & I & [-> %Hehist_fin] & ◯ehist_fin & toks & %Disj & #Syn & Prot)".
   encode_agree Hγe.
 
   iDestruct (ghost_map_lookup with "I p") as %HGp.
@@ -1705,7 +1637,7 @@ Proof.
     iDestruct "IED" as (??????????) "#(%&%& %Hγe & d.l↦ & d.r↦ & IED)".
     iDestruct "G" as (??????????) "(%&%&%&%&% & g.slot↦ & g.dom↦ & †g & S & Act_st)".
     iDestruct "Act_st" as (e ehistF ->)
-      "(●M & ●VeI & ●VTxI & F & I & [-> %HlenF] & Fin & T & %Disj & Prot)".
+      "(●M & ●VeI & ●VTxI & F & I & [-> %HlenF] & Fin & T & %Disj & #Syn & Prot)".
     encode_agree Hγe.
   iMod (do_unprotect with "Prot") as "T'"; [solve_ndisj|].
 
@@ -1749,7 +1681,7 @@ Lemma slot_guard_drop γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums id
   ↑to_baseN mgmtN ⊆ E →
   {{{ inv ebrInvN (EBRDomain γsb γtok γinfo γptrs γeh γrs γU γV γR γe_nums d lBag rList) ∗
       sbs.(Slot) γsb slot idx None ∗
-      (⊤,{[sid idx]}) ↦P2[γV]{ 1/2/2 } false ∗
+      (⊤,{[sid idx]}) ↦P2[γV] {# 1/2/2 } false ∗
       (g +ₗ guardSlot) ↦ #slot ∗
       (g +ₗ guardDom) ↦ #d ∗
       † g … guardSize
@@ -1782,7 +1714,7 @@ Proof.
     iDestruct "IED" as (??????????) "#(%&%& %Hγe & d.l↦ & d.r↦ & IED)".
     iDestruct "G" as (??????????) "(%&%&%&%&% & g.slot↦ & g.dom↦ & †g & S & Act_st)".
     iDestruct "Act_st" as (e ehistF ->)
-    "(●M & ●VeI & ●VTxI & F & I & [-> %HlenF] & Fin & T & %Disj & Prot)".
+    "(●M & ●VeI & ●VTxI & F & I & [-> %HlenF] & Fin & T & %Disj & #Syn & Prot)".
   encode_agree Hγe.
   iMod (do_unprotect with "Prot") as "T'"; [done|].
 
@@ -1867,7 +1799,7 @@ Proof.
   iDestruct "IED" as (??????????) "#(%&%& %Hγe & d.l↦ & d.r↦ & IED)".
     iDestruct "G" as (??????????) "(%&%&%&%&% & g.slot↦ & g.dom↦ & †g & S & Act_st)".
     iDestruct "Act_st" as (e ehistF ->)
-      "(●M & ●VeI & ●VTxI & F & I & [-> %HlenF] & Fin & T & %Disj & Prot)".
+      "(●M & ●VeI & ●VTxI & F & I & [-> %HlenF] & Fin & T & %Disj & #Syn & Prot)".
   encode_agree Hγe.
   wp_pures. wp_load. wp_pures. wp_load. wp_pures.
   wp_bind (!_)%E.
@@ -1907,15 +1839,17 @@ Proof.
   { by rewrite length_alter. }
   (* Update [γU]. In particular, change [γU_i] to true. *)
   (* First lookup [infos] *)
-  iAssert(|={E ∖ ∅ ∖ ↑ebrInvN}=> UnlinkFlags γU info (alter (union {[i_p]}) e ehist) ∗ i_p ↦p[γU]{1/2} true)%I with "[γU γU_i]" as ">[γU γU_i]".
+  iAssert (UnlinkFlags γU info (alter (union {[i_p]}) e ehist) ∗ i_p ↦p[γU]□ true)%I with "[> γU γU_i]" as "[γU #γU_i]".
   { iDestruct "γU" as "[$ γU]".
     iEval (rewrite big_sepM_delete; [|exact Hinfo_i]) in "γU".
     iDestruct "γU" as "[γU_i' γU]".
-    iDestruct "γU_i'" as (U) "[γU_i' %]".
-    iDestruct (ghost_vars_agree with "γU_i' γU_i") as %->; [set_solver|].
-    iMod (ghost_vars_update_halves' true with "γU_i' γU_i") as "[γU_i $]".
+    iDestruct "γU_i'" as ([]) "[γU_i' %]".
+    all: iDestruct (ghost_vars_agree with "γU_i' γU_i") as %?; first by set_solver.
+    { congruence. }
+    iMod (ghost_vars_update_halves' true with "γU_i' γU_i") as "[γU_i _]".
+    iMod (ghost_vars_persist with "γU_i") as "#γU_i". iFrame "#".
     iEval (rewrite big_sepM_delete; [|done]).
-    rewrite bi.sep_exist_r. iExists true. iFrame. iModIntro.
+    rewrite bi.sep_exist_r. iExists true. iFrame "#". iModIntro.
     iSplit.
     { iPureIntro. split; [intros _|done]. rewrite elem_of_fold_hist.
       exists e, ({[i_p]} ∪ unlinked_G). split; [|set_solver].
@@ -1969,7 +1903,7 @@ Proof.
   }
 
   iModIntro.
-  iSplitL "info ptrs ehist ret SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret Gcinv γp_i γU_i γR_i"; last first.
+  iSplitL "info ptrs ehist ret SB RL EInfo SInfo γU d.ge↦ Reg Recl Ret Gcinv γp_i γR_i"; last first.
   { wp_pures.
     iAssert (BaseGuard _ _ _ _ ∅) with "[g.slot↦ g.dom↦ †g S ●M ●VeI ●VTxI Fin I T ◯ehist Prot]" as "G".
     { iFrame (Hγe) "∗#%". done. }
@@ -2227,11 +2161,11 @@ Proof.
     { rewrite length_app /=. lia. }
 
     (* Update epoch history and SlotInfos, getting new reclaimable tokens *)
-    iAssert (|={E ∖ ↑ebrInvN}=>
+    iAssert (
       epoch_history_auth γeh ehist' ∗
       SlotInfos γV γtok γeh γe_nums slist sbvmap (ehist' ++ [∅]) ∗
       toks γtok (gset_to_coPset (u_ge ∖ old_reclaimable)) ⊤
-    )%I with "[SInfo ehist]" as ">(ehist & SInfo & toks)".
+    )%I with "[> SInfo ehist]" as "(ehist & SInfo & toks)".
     { (* Update [SInfo], from [ge] to [ge + 1] *)
       (* Non-Validated: Update [●γe_nums] *)
       (* Validated: Nothing to do. *)
@@ -2326,9 +2260,9 @@ Proof.
     (* Update [ehist], by appending [∅]. *)
     iMod ((epoch_history_advance ehist' ∅) with "ehist") as "[ehist ◯ehist]"; [lia|].
     assert (length ehist' = ge + 1) as -> by lia.
-    iAssert (|={E ∖ ↑ebrInvN}=>
+    iAssert (
       GhostEpochInformations γV γeh γe_nums (ge + 1) slist sbvmap
-    )%I with "[EInfo ◯ehist]" as ">EInfo".
+    )%I with "[> EInfo ◯ehist]" as "EInfo".
     { (* Update [EInfos], from [ge] to [ge + 1] *)
       iDestruct "EInfo" as "(GE_2_et_al & GE_1 & GE_0 & #sbvmap & γV_to_ge & γV_from_ge)".
       unfold GhostEpochInformations. iFrame "#".
@@ -2520,7 +2454,6 @@ Proof.
     iDestruct "T" as "[T Ti]".
     iMod (exchange_toks_give_all with "Ex Ti") as "[rei cinv]"; [solve_ndisj|].
     iCombine "Gcinv cinv" as "cinv".
-    rewrite -coP_cinv_own_fractional; last set_solver.
     rewrite -top_complement_singleton.
     iMod (coP_cinv_cancel with "CInv_i cinv") as "P"; [solve_ndisj|].
       iDestruct "P" as (?) "(><- & R & >r1↦)".
@@ -2528,7 +2461,7 @@ Proof.
       rewrite Hi in Hi'. injection Hi' as [= ->]. simpl.
 
     (* update γR *)
-    iDestruct (coP_ghost_map_elem_combine with "r1↪γptrs rei") as "[ri _]".
+    iCombine "r1↪γptrs rei" as "ri".
     rewrite -top_complement_singleton.
     iDestruct (ghost_vars2_delete_1 _ i with "●R2") as "[γR' ●R2]".
     { rewrite gset_to_coPset_difference elem_of_difference. split; auto.
@@ -2571,4 +2504,4 @@ Proof.
 
 End ebr.
 
-#[export] Typeclasses Opaque EBRAuth BaseManaged BaseInactive BaseGuard BaseNodeInfo.
+#[export] Typeclasses Opaque EBRAuth BaseManaged BaseInactive BaseGuard BaseNodeInfo BaseGuardedNodeInfo.

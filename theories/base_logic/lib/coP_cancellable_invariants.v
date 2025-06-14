@@ -2,7 +2,6 @@ From smr.algebra Require Export coPset.
 From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Export invariants.
 From iris.prelude Require Import options.
-Import uPred.
 
 Class coP_cinvG Σ := { #[local] coP_cinv_inG :: inG Σ coPneset_disjR }.
 
@@ -51,11 +50,26 @@ Section proofs.
     by iCombine "H1 H2" gives %?%coPneset_disj_valid_op.
   Qed.
 
+  Global Instance coP_cinv_own_combine_gives γ t1 t2 :
+    CombineSepGives (coP_cinv_own γ t1) (coP_cinv_own γ t2) ⌜t1 ## t2⌝.
+  Proof.
+    rewrite /CombineSepGives. iIntros "[H1 H2]".
+    iDestruct (coP_cinv_own_valid with "H1 H2") as %?.
+    eauto.
+  Qed.
+
+  Global Instance coP_cinv_own_combine_as γ t1 t2 :
+    CombineSepAs (coP_cinv_own γ t1) (coP_cinv_own γ t2) (coP_cinv_own γ (t1 ∪ t2)).
+  Proof.
+    rewrite /CombineSepAs. iIntros "[H1 H2]".
+    iCombine "H1 H2" as "H" gives %?.
+    rewrite coPneset_disj_union //.
+  Qed.
+
   Lemma coP_cinv_own_1_l γ t : coP_cinv_own γ ⊤ -∗ coP_cinv_own γ t -∗ False.
   Proof.
     iIntros "H1 H2".
-    iDestruct (coP_cinv_own_valid with "H1 H2") as "%".
-    by apply coPneset_top_disjoint in H.
+    iDestruct (coP_cinv_own_valid with "H1 H2") as %[]%coPneset_top_disjoint.
   Qed.
 
   Lemma coP_cinv_iff N γ P t : coP_cinv N γ P -∗ ▷ □ (P ↔ t) -∗ coP_cinv N γ t.
@@ -121,14 +135,8 @@ Section proofs.
     ▷ P ∗ coP_cinv_own γ p ∗ (∀ E' : coPset, ▷ P ∨ coP_cinv_own γ ⊤ ={E',↑N ∪ E'}=∗ True)).
   Proof.
     iIntros (?) "Hinv Hown".
-    iPoseProof (inv_acc (↑ N) N with "Hinv") as "H"; first done.
-    rewrite difference_diag_L.
-    iPoseProof (fupd_mask_frame_r _ _ (E ∖ ↑ N) with "H") as "H"; first set_solver.
-    rewrite left_id_L -union_difference_L //. iMod "H" as "[[$ | >Hown'] H]".
-    - iIntros "{$Hown} !>" (E') "HP".
-      iPoseProof (fupd_mask_frame_r _ _ E' with "(H [HP])") as "H"; first set_solver.
-      { iDestruct "HP" as "[?|?]"; eauto. }
-      by rewrite left_id_L.
+    iMod (inv_acc_strong with "Hinv") as "[[$ | >Hown'] H]"; first done.
+    - iIntros "{$Hown} !>" (E') "HP". iApply "H". by iNext.
     - iDestruct (coP_cinv_own_1_l with "Hown' Hown") as %[].
   Qed.
 
@@ -138,9 +146,8 @@ Section proofs.
   Proof.
     iIntros (?) "#Hinv Hγ".
     iMod (coP_cinv_acc_strong with "Hinv Hγ") as "($ & $ & H)"; first done.
-    iIntros "!> HP".
-    rewrite {2}(union_difference_L (↑N) E)=> //.
-    iApply "H". by iLeft.
+    iIntros "!> HP". iMod ("H" with "[$HP]") as "_".
+    rewrite -union_difference_L //.
   Qed.
 
   (*** Other *)
@@ -148,8 +155,8 @@ Section proofs.
   Proof.
     iIntros (?) "#Hinv Hγ".
     iMod (coP_cinv_acc_strong with "Hinv Hγ") as "($ & Hγ & H)"; first done.
-    rewrite {2}(union_difference_L (↑N) E)=> //.
-    iApply "H". by iRight.
+    iMod ("H" with "[$Hγ]") as "_".
+    rewrite -union_difference_L //.
   Qed.
 
   Global Instance into_inv_coP_cinv N γ P : IntoInv (coP_cinv N γ P) N := {}.
@@ -159,9 +166,8 @@ Section proofs.
             (↑N ⊆ E) (coP_cinv_own γ p) (fupd E (E∖↑N)) (fupd (E∖↑N) E)
             (λ _, ▷ P ∗ coP_cinv_own γ p)%I (λ _, ▷ P)%I (λ _, None)%I.
   Proof.
-    rewrite /IntoAcc /accessor. iIntros (?) "#Hinv Hown".
-    rewrite exist_unit -assoc.
-    iApply (coP_cinv_acc with "Hinv"); done.
+    rewrite /IntoAcc /accessor bi.exist_unit -assoc.
+    iIntros (?) "#Hinv Hown". by iApply coP_cinv_acc.
   Qed.
 End proofs.
 

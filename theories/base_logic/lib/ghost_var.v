@@ -49,13 +49,20 @@ Section lemmas.
     iDestruct (persistent_ghost_var_valid_2 with "Hvar1 Hvar2") as %[_ ?]. done.
   Qed.
 
-  Global Instance ghost_var_combine_gives γ a1 a2 q2 :
+  Global Instance persistent_ghost_var_combine_gives_1 γ a1 a2 q2 :
     CombineSepGives (persistent_ghost_var γ a1) (ghost_var γ q2 a2)
       ⌜(q2 < 1)%Qp ∧ a1 = a2⌝.
   Proof.
     rewrite /CombineSepGives. iIntros "[H1 H2]".
     iDestruct (persistent_ghost_var_valid_2 with "H1 H2") as %[H1 H2].
     eauto.
+  Qed.
+
+  Global Instance persistent_ghost_var_combine_gives_2 γ a1 a2 q2 :
+    CombineSepGives (ghost_var γ q2 a2) (persistent_ghost_var γ a1)
+      ⌜(q2 < 1)%Qp ∧ a1 = a2⌝.
+  Proof.
+    rewrite /CombineSepGives comm. apply persistent_ghost_var_combine_gives_1.
   Qed.
 
 End lemmas.

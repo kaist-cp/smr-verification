@@ -1,16 +1,19 @@
 # Modular Verification of Safe Memory Reclamation in Concurrent Separation Logic
 
-This repository contains the proofs of the following paper, mechanized in Coq with the Iris separation logic framework.
+This repository contains the proofs of the following papers, mechanized in Rocq with the Iris separation logic framework.
 
 > Jaehwang Jung, Janggun Lee, Jaemin Choi, Jaewoo Kim, Sunho Park, and Jeehoon Kang. 2023. Modular Verification of Safe Memory Reclamation in Concurrent Separation Logic. Proc. ACM Program. Lang. 7, OOPSLA2, Article 251 (October 2023), 29 pages. https://doi.org/10.1145/3622827
 
 (full paper with appendix: <https://drive.google.com/file/d/1hBjJ6nhFYiTJ1KI5u7i8MvLPznysBGSD/view?usp=sharing>)
 
+> Janggun Lee, Jeonghyeon Kim, and Jeehoon Kang. 2025. Leveraging Immutability to Validate Hazard Pointers for Optimistic Traversals. Proc. ACM Program. Lang. 9, PLDI, Article 148 (June 2025), 22 pages. https://doi.org/10.1145/3729247
+
+(full paper with appendix: <https://drive.google.com/file/d/1Z2n0JIUxy72goVWo4Qa77a0PVgqZjppr/view?usp=sharing>)
+
 ## Build
 This version is known to compile with
 Coq 8.19.0 and
-development versions of [Iris](https://gitlab.mpi-sws.org/iris/iris) and [Diaframe][]
-as specified in [smr-verification.opam](smr-verification.opam).
+development versions of [Iris](https://gitlab.mpi-sws.org/iris/iris).
 
 The easiest way to correctly install the dependencies is [opam](https://opam.ocaml.org/doc/Install.html) (2.0 or newer).
 Once you have installed opam, run:
@@ -62,7 +65,7 @@ python3 count_lines.py
 
 and statistics will be saved in [`line_count.tsv`](line_count.tsv) (tab separated values).
 
-## [Hazard Pointers](theories/hazptr) (§3,§4,§5)
+## [Hazard Pointers](theories/hazptr) (§3,§4,§5 of OOPSLA 2023, §4 of PLDI 2025)
 * [`code_hazptr.v`](theories/hazptr/code_hazptr.v): implementation of hazard pointers (Fig. 2).
 * [`spec_hazptr.v`](theories/hazptr/spec_hazptr.v): specifications of hazard pointers. (Fig. 5,10, and Appendix A).
 
@@ -110,37 +113,42 @@ and statistics will be saved in [`line_count.tsv`](line_count.tsv) (tab separate
   * [`code_ms.v`](theories/hazptr/code_ms.v), [`proof_ms.v`](theories/hazptr/proof_ms.v): Michael-Scott queue.
   * [`code_dglm.v`](theories/hazptr/code_ms.v), [`proof_dglm.v`](theories/hazptr/proof_ms.v): DGLM queue.
   * [`code_harris_michael_find.v`](theories/hazptr/code_harris_michael_find.v), [`proof_harris_michael_find.v`](theories/hazptr/proof_harris_michael_find.v): Harris-Michael's list based set's find operation.
-    * We don't have Harris's set here as HP cannot be applied to Harris set in a lock-free manner.
     * The proof of set operations and initializer are in [`code_harris_operations.v`](theories/hazptr/code_harris_operations.v) and [`proof_harris_operations.v`](theories/hazptr/proof_harris_operations.v)
+  *  [`code_harris_find.v`](theories/hazptr/code_harris_find.v), [`proof_harris_michael_find.v`](theories/hazptr/proof_harris_find.v): Harris's list based set's find operation (from PLDI 2025 paper).
+      * The proof of set operations and initializers are shared with that of Harris-Michael's list
   * [`code_cldeque.v`](theories/hazptr/code_cldeque.v), [`proof_cldeque.v`](theories/hazptr/proof_cldeque.v): Chase-Lev deque.
 
 * [`closed_proofs.v`](theories/hazptr/closed_proofs.v): closed proofs showing that the implementation satisfies the specifications.
 * [`client.v`](theories/hazptr/client.v): example client codes using the specs of the data structures shown above, and the proof of their safety.
 
-## [Epoch-Based RCU](theories/ebr) (§6)
+## [Epoch-Based RCU](theories/ebr) (§6 of OOPSLA 2023)
 * [`code_ebr.v`](theories/ebr/code_ebr.v): implementation of epoch-based RCU.
 * [`spec_rcu_simple.v`](theories/ebr/spec_rcu_simple.v): a "simple" specification of RCU, very similar to `spec_hazptr.v`. However, this spec does not support optimistic traversals.
 * [`spec_rcu_base.v`](theoreis/ebr/spec_rcu_base.v): base specification of RCU. (Fig. 11)
 
-    | Paper               | Coq                       |
-    | ------------------- | ------------------------- |
-    | RCUState            | `RCUAuthT`                |
-    | RCUSlot             | `BaseInactiveT`           |
-    | Guard               | `BaseGuardT`              |
-    | BlockInfo           | `BaseNodeInfoT`           |
-    | RCU-Lock            | `guard_activate_spec'`    |
-    | RCU-Unlock          | `guard_deactivate_spec'`  |
-    | Guard-Managed-Agree | `guard_managed_agree'`    |
-    | Managed-Protected   | `guard_protect'`          |
-    | Managed-BlockInfo   | `managed_get_node_info'`  |
-    | Guard-Access        | `guard_acc'`              |
-    | RCU-Retire          | `rcu_domain_retire_spec'` |
+    | Paper               | Coq                        |
+    | ------------------- | -------------------------- |
+    | RCUState            | `RCUAuthT`                 |
+    | RCUSlot             | `BaseInactiveT`            |
+    | Guard               | `BaseGuardT`               |
+    | BlockInfo           | `BaseNodeInfoT`            |
+    | RCU-Lock            | `guard_activate_spec'`     |
+    | RCU-Unlock          | `guard_deactivate_spec'`   |
+    | Guard-Managed-Agree | `guard_managed_agree'`     |
+    | Managed-Protected   | `guard_managed_notin_syn'` |
+    | Managed-BlockInfo   | `managed_get_node_info'`   |
+    | Guard-Access        | `guard_acc'`               |
+    | RCU-Retire          | `rcu_domain_retire_spec'`  |
   * Difference between paper and code.
     * In Paper, RCUState is a single map containing the status of each block ID. In Coq, we split the role into one map and one set to simplify the proof.
       * As a consequence, BlockStatus only exists in the paper. The role is split into a map and a set.
     * In Paper, Guard only has the "retired" set (Syn in Coq). In Coq, we hold the additional "guarded" map.
+      <!-- FIXME: discription is misleading.
+        * For BaseGuardedNodeInfo, it doesn't need to be exposed to clients.
+        * Rather, this is for traversal spec.
+      -->
       * The map essentially holds the BlockInfo of all the pointers the guard has seen so far, similar to the `Validated` state of hazard pointer shields. This allows the agree rule to be a wand, as otherwise it would need to be a fancy update so that the user can open the RCU invariant to obtain the BlockInfo.
-      * This additionally allows more separation-logic style rules as specs, at it is difficult to represent ''a element is **not** in a set'' with resources. Notably, we have the `BaseGuardedNodeInfo` resource, which is evidence that a block ID is not in the retired set + BlockInfo, hence most rules require it as a precondition instead.
+      * This additionally allows more separation-logic style rules as specs, as it is difficult to represent ''a element is **not** in a set'' with resources. Notably, we have the `BaseGuardedNodeInfo` resource, which is evidence that a block ID is not in the retired set + BlockInfo, hence most rules require it as a precondition instead.
     * `guard_activate_spec'` is not LAT in Coq, but a regular Hoare triple. This is because the synchronized set is technically a subset of the retired set at the time of activation. One can use `rcu_auth_guard_subset` to obtain this fact.
     * Rest is similar to the counterparts in hazard pointers.
   * Rules omitted from the paper.
@@ -183,7 +191,10 @@ and statistics will be saved in [`line_count.tsv`](line_count.tsv) (tab separate
     In particular, the proofs of the traversal and simple specs are instantiated using the proof of the base spec.
 * [`client.v`](theories/ebr/client.v): example client codes using the specs of the data structures shown above, and the proof of their safety.
 
-## [`diaframe`](theories/diaframe)
+## [`diaframe`](theories/diaframe) (OOPSLA 2023)
+
+Note: Current not maintained.
+
 Experimentation for applying [Diaframe][], a separation logic automation framework, to our specification.
 
 The interesting files are as follows.

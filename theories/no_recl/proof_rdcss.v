@@ -9,10 +9,10 @@ From smr Require Import helpers no_recl.spec_rdcss no_recl.code_rdcss.
 Class rdcssG Σ := RdcssG {
   #[local] rdcss_valG :: inG Σ (excl_authR valO);
   #[local] rdcss_tokenG :: tokenG Σ;
-  #[local] rdcss_one_shotG :: inG Σ (csumR (exclR unitO) (agreeR unitO));
+  #[local] rdcss_one_shotG :: inG Σ (csumR (exclR unitO) unitR);
 }.
 
-Definition rdcssΣ : gFunctors := #[GFunctor (excl_authR valO); tokenΣ; GFunctor (csumR (exclR unitO) (agreeR unitO))].
+Definition rdcssΣ : gFunctors := #[GFunctor (excl_authR valO); tokenΣ; GFunctor (csumR (exclR unitO) unitR)].
 
 Global Instance subG_rdcssΣ {Σ} :
   subG rdcssΣ Σ → rdcssG Σ.
@@ -87,7 +87,7 @@ Definition descr_inv P Q p n (l_n l_descr : loc) (tid_ghost_winner : proph_id) �
     (l_n ↦{# 1/2} (InjRV #l_descr) ∗ own γ_s (Cinl $ Excl ()) ∗
       (pending_state P n (proph_extract_winner vs) tid_ghost_winner γ_n γ_a
        ∨ accepted_state (Q n) (proph_extract_winner vs) tid_ghost_winner)
-     ∨ own γ_s (Cinr $ to_agree ()) ∗ done_state (Q n) l_descr tid_ghost_winner γ_t γ_a).
+     ∨ own γ_s (Cinr ()) ∗ done_state (Q n) l_descr tid_ghost_winner γ_t γ_a).
 
 Definition rdcss_au γ_n Q l_m m1 n1 n2 : iProp :=
   AU <{ ∃∃ (m n : val), (l_m ↦_(λ _, True) m) ∗ Rdcss γ_n n }>
@@ -125,7 +125,7 @@ Qed.
 
 Lemma state_done_extract_Q P Q p n l_n l_d tid_ghost γ_n γ_t γ_s γ_a :
   inv descrN (descr_inv P Q p n l_n l_d tid_ghost γ_n γ_t γ_s γ_a) -∗
-  own γ_s (Cinr (to_agree ())) -∗
+  own γ_s (Cinr ()) -∗
   □(own_token γ_t ={⊤}=∗ ▷ (Q n)).
 Proof.
   iIntros "#Hinv #Hs !# Ht".
@@ -185,8 +185,7 @@ Proof.
   iIntros "!>" (vs'' ->) "Hp'". simpl.
   (* Update to [Done] *)
   iDestruct "Accepted" as "[Hp_phost_inv [Q Heq]]".
-  iMod (own_update with "Hs") as "Hs"; first by apply (cmra_update_exclusive (Cinr (to_agree ()))).
-  iDestruct "Hs" as "#Hs'".
+  iMod (own_update _ _ (Cinr ()) with "Hs") as "#Hs"; first by apply cmra_update_exclusive.
   (* Close descr inv *)
   iModIntro. iSplitL "Hp_phost_inv Token_a Q Hp' l_descr↦"; first by exefr.
   (* Close rdcss inv *)

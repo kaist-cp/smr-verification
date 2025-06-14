@@ -463,10 +463,7 @@ Proof using DISJN.
     iMod "AU" as (?) "[[Labs %HLabs] [_ Commit]]".
     iDestruct (ghost_var_agree with "Labs Linv") as %[= ->].
     assert (L = take idx L ++ [(p_k, false, (prev,γ_prev))] ++ [(c_k, false, (curr,γ_curr))] ++ drop (S (S idx)) L) as L_EQ.
-    { rewrite -{1}(take_drop (S idx) L). rewrite (take_S_r _ _ (p_k, false, (prev,γ_prev))); [|done].
-      simplify_list_eq. repeat f_equal. erewrite (drop_S _ _ (S idx)); [done|].
-      by rewrite -HLc Nat.add_1_r.
-    }
+    { rewrite /= -!drop_S ?take_drop //. rewrite -HLc Nat.add_1_r //. }
     set (idx' := length (get_abs_state (take idx L))).
     iMod ("Commit" $! true _ (bool_decide (c_k = k)) prev curr _ _ idx' with "[$Labs]") as "HΦ".
     { iFrame "∗#%". iPureIntro. split_and!; auto; last first.

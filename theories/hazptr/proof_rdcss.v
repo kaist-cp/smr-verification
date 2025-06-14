@@ -1,5 +1,5 @@
 From iris.algebra Require Import excl_auth csum.
-From iris.base_logic.lib Require Import invariants ghost_var token.
+From iris.base_logic.lib Require Import invariants token.
 From smr.program_logic Require Import atomic.
 From smr.lang Require Import proofmode notation.
 From iris.prelude Require Import options.
@@ -9,12 +9,11 @@ From smr Require Import helpers hazptr.spec_hazptr hazptr.spec_rdcss hazptr.code
 Class rdcssG Σ := RdcssG {
   #[local] rdcss_valG :: inG Σ (excl_authR valO);
   #[local] rdcss_tokenG :: tokenG Σ;
-  #[local] rdcss_one_shotG :: inG Σ (csumR (exclR unitO) (agreeR unitO));
+  #[local] rdcss_one_shotG :: inG Σ (csumR (exclR unitO) unitR);
   #[local] rdcss_managed_valG :: inG Σ (agreeR valO);
-  #[local] rdcss_managed_gvarG :: ghost_varG Σ unit;
 }.
 
-Definition rdcssΣ : gFunctors := #[GFunctor (excl_authR valO); tokenΣ; GFunctor (csumR (exclR unitO) (agreeR unitO)); GFunctor (agreeR valO); ghost_varΣ unit].
+Definition rdcssΣ : gFunctors := #[GFunctor (excl_authR valO); tokenΣ; GFunctor (csumR (exclR unitO) unitR); GFunctor (agreeR valO)].
 
 Global Instance subG_rdcssΣ {Σ} :
   subG rdcssΣ Σ → rdcssG Σ.
@@ -88,19 +87,19 @@ Definition pending_state P (n1 : val) (proph_winner : option proph_id) tid_ghost
 Definition accepted_state Q (proph_winner : option proph_id) (tid_ghost_winner : proph_id) : iProp :=
   (∃ vs, proph tid_ghost_winner vs) ∗ Q ∗ ⌜from_option (λ p, p = tid_ghost_winner) True proph_winner⌝.
 
-Definition done_state Qn (tid_ghost_winner : proph_id) (γ_t γ_a γ_d : gname) : iProp :=
+Definition done_state Qn (tid_ghost_winner : proph_id) (γ_t γ_a γ_dq : gname) : iProp :=
   (Qn ∨ own_token γ_t) ∗
   (∃ vs, proph tid_ghost_winner vs) ∗
-  (∃ (γ_dv γ_dq : gname), ⌜γ_d = encode (γ_dv, γ_dq)⌝ ∗ ghost_var γ_dq (1/2)%Qp ()) ∗
+  token γ_dq ∗
   own_token γ_a.
 
-Definition descr_inv P Q p n (l_n l_d : loc) (tid_ghost_winner : proph_id) γ γ_t γ_s γ_a γ_d : iProp :=
+Definition descr_inv P Q p n (l_n l_d : loc) (tid_ghost_winner : proph_id) γ γ_t γ_s γ_a γ_dq : iProp :=
   ∃ vs,
     proph p vs ∗
     (l_n ↦{# 1/2} (InjRV #l_d) ∗ own γ_s (Cinl $ Excl ()) ∗
       (pending_state P n (proph_extract_winner vs) tid_ghost_winner γ γ_a
        ∨ accepted_state (Q n) (proph_extract_winner vs) tid_ghost_winner)
-     ∨ own γ_s (Cinr $ to_agree ()) ∗ done_state (Q n) tid_ghost_winner γ_t γ_a γ_d).
+     ∨ own γ_s (Cinr ()) ∗ done_state (Q n) tid_ghost_winner γ_t γ_a γ_dq).
 
 Definition rdcss_au γ Q l_m m1 n1 n2 : iProp :=
   AU <{ ∃∃ (m n : val), (l_m ↦_(λ _, True) m) ∗ Rdcss γ n }>
@@ -120,13 +119,13 @@ Definition rdcss_inv (γ γ_z γ_n : gname) (l_n : loc) : iProp :=
     | Quiescent n =>
       l_n ↦{# 1/2} (InjLV n) ∗ Rdcss_auth γ n
     | Updating l_descr l_m m1 n1 n2 p =>
-      ∃ q Q tid_ghost_winner (γ_d γ_dv γ_dq γ_t γ_s γ_a : gname),
+      ∃ Q tid_ghost_winner (γ_d γ_dv γ_dq γ_t γ_s γ_a : gname),
         ⌜val_is_unboxed m1⌝ ∗
         ⌜γ_d = encode (γ_dv, γ_dq)⌝ ∗
         hazptr.(Managed) γ_z l_descr γ_d 1 node ∗
         own γ_dv (to_agree (#l_m, m1, n1, n2, #p)%V) ∗
-        ghost_var γ_dq (1/2 + q)%Qp () ∗
-        inv descrN (descr_inv (rdcss_au γ Q l_m m1 n1 n2) Q p n1 l_n l_descr tid_ghost_winner γ γ_t γ_s γ_a γ_d) ∗
+        token γ_dq ∗
+        inv descrN (descr_inv (rdcss_au γ Q l_m m1 n1 n2) Q p n1 l_n l_descr tid_ghost_winner γ γ_t γ_s γ_a γ_dq) ∗
         l_m ↦_(λ _, True) □
     end.
 
@@ -151,9 +150,9 @@ Proof.
   by iCombine "H● H◯" gives %?%excl_auth_frag_op_valid.
 Qed.
 
-Lemma state_done_extract_Q P Q p n l_n l_d tid_ghost γ γ_t γ_s γ_a γ_d :
-  inv descrN (descr_inv P Q p n l_n l_d tid_ghost γ γ_t γ_s γ_a γ_d) -∗
-  own γ_s (Cinr (to_agree ())) -∗
+Lemma state_done_extract_Q P Q p n l_n l_d tid_ghost γ γ_t γ_s γ_a γ_dq :
+  inv descrN (descr_inv P Q p n l_n l_d tid_ghost γ γ_t γ_s γ_a γ_dq) -∗
+  own γ_s (Cinr ()) -∗
   □(own_token γ_t ={⊤}=∗ ▷ (Q n)).
 Proof.
   iIntros "#Hinv #Hs !# Ht".
@@ -188,7 +187,7 @@ Lemma complete_succeeding_thread_pending (γ γ_z γ_n γ_t γ_s γ_a γ_d γ_dq
   γ = encode (γ_z, γ_n) →
   γ_d = encode (γ_dv, γ_dq) →
   inv rdcssIntN (rdcss_inv γ γ_z γ_n l_n) -∗
-  inv descrN (descr_inv P Q p n1 l_n l_descr tid_ghost γ γ_t γ_s γ_a γ_d) -∗
+  inv descrN (descr_inv P Q p n1 l_n l_descr tid_ghost γ γ_t γ_s γ_a γ_dq) -∗
   hazptr.(IsHazardDomain) γ_z l_dom -∗
   hazptr.(Shield) γ_z s (Validated l_descr γ_d node 1) -∗
   own γ_dv (to_agree (#l_m, m1, n1, n2, #p)%V) -∗
@@ -215,15 +214,14 @@ Proof using DISJN.
   iDestruct (pointsto_agree with "l_n.p↦ l_n.p'↦") as %[= ->].
   iCombine "l_n.p↦ l_n.p'↦" as "l_n.p↦".
   wp_apply (wp_resolve with "Hp"); first done. wp_cmpxchg_suc.
-  iDestruct "Hst" as (?????????) "(%Hm1'_unbox & %Hγ_d' & G_l_descr & #γ_dv' & γ_dq & #InvD' & #isGC)".
+  iDestruct "Hst" as (????????) "(%Hm1'_unbox & %Hγ_d' & G_l_descr & #γ_dv' & γ_dq & #InvD' & #isGC)".
   iDestruct (hazptr.(shield_managed_agree) with "S G_l_descr") as %<-.
   encode_agree Hγ_d.
   iCombine "γ_dv γ_dv'" gives %[= <- <- <- <- <-]%to_agree_op_inv_L. iClear "γ_dv'".
   iIntros "!>" (vs'' ->) "Hp'". simpl.
   (* Update to [Done] *)
   iDestruct "Accepted" as "[Hp_phost_inv [Q Heq]]".
-  iMod (own_update with "Hs") as "Hs"; first by apply (cmra_update_exclusive (Cinr (to_agree ()))).
-  iDestruct "Hs" as "#Hs'". iDestruct "γ_dq" as "[γ_dq _]".
+  iMod (own_update _ _ (Cinr ()) with "Hs") as "#Hs"; first by apply cmra_update_exclusive.
   (* Close descr inv *)
   iModIntro. iSplitL "Hp_phost_inv Token_a Q Hp' γ_dq"; first by exefr.
   (* Close rdcss inv *)
@@ -240,7 +238,7 @@ Lemma complete_failing_thread (γ γ_z γ_n γ_t γ_s γ_a γ_d γ_dv γ_dq : gn
   γ_d = encode (γ_dv, γ_dq) →
   tid_ghost_inv ≠ tid_ghost →
   inv rdcssIntN (rdcss_inv γ γ_z γ_n l_n) -∗
-  inv descrN (descr_inv P Q p n1 l_n l_descr tid_ghost_inv γ γ_t γ_s γ_a γ_d) -∗
+  inv descrN (descr_inv P Q p n1 l_n l_descr tid_ghost_inv γ γ_t γ_s γ_a γ_dq) -∗
   hazptr.(IsHazardDomain) γ_z l_dom -∗
   hazptr.(Shield) γ_z s (Validated l_descr γ_d node 1) -∗
   own γ_dv (to_agree (#l_m, m1, n1, n2, #p)%V) -∗
@@ -274,14 +272,11 @@ Proof.
     destruct (decide (l_descr' = l_descr)) as [-> | Hn].
     + (** The [descr] protocol is [done] while still being an active protocol,
           which is a contradiction *)
-      iDestruct "Done" as "(_ & _ & >Hld & _)".
-      iDestruct "Hld" as (???) "γ_dq".
-      iDestruct "Hst" as (?????????) "(_ & >% & M & _ & >γ_dq' & _)".
+      iDestruct "Done" as "(_ & _ & >γ_dq & _)".
+      iDestruct "Hst" as (????????) "(_ & >% & M & _ & >γ_dq' & _)".
       iDestruct (hazptr.(shield_managed_agree) with "S M") as "#><-".
-      do 2 encode_agree Hγ_d.
-      iCombine "γ_dq γ_dq'" gives %[H _].
-      rewrite Qp.add_assoc Qp.half_half in H.
-      by apply Qp.not_add_le_l in H.
+      encode_agree Hγ_d.
+      iCombine "γ_dq γ_dq'" gives %[].
     + (* CmpXchg fails *)
       wp_apply (wp_resolve with "Hp"); first done. wp_cmpxchg_fail.
       iIntros "!>" (vs'' ->) "Hp".
@@ -298,7 +293,7 @@ Lemma complete_spec (l_n l_m l_dom s : loc) (l_descr : blk) (m1 n1 n2 : val) p (
   γ = encode (γ_z, γ_n) →
   γ_d = encode (γ_dv, γ_dq) →
   inv rdcssIntN (rdcss_inv γ γ_z γ_n l_n) -∗
-  inv descrN (descr_inv (rdcss_au γ Q l_m m1 n1 n2) Q p n1 l_n l_descr tid_ghost_inv γ γ_t γ_s γ_a γ_d) -∗
+  inv descrN (descr_inv (rdcss_au γ Q l_m m1 n1 n2) Q p n1 l_n l_descr tid_ghost_inv γ γ_t γ_s γ_a γ_dq) -∗
   hazptr.(IsHazardDomain) γ_z l_dom -∗
   l_m ↦_(λ _, True) □ -∗
   inv_heap_inv -∗
@@ -388,7 +383,7 @@ Proof using DISJN.
     iModIntro. iSplitL "l_n.p↦ l_n.p'↦ H●". { iFrame "l_n.p↦ l_n.p'↦ H●". }
     wp_pures. by iApply "HΦ".
   - (* We found descriptor *)
-    iDestruct "Hst" as (q Q tid_ghost γ_d γ_dv γ_dq γ_t γ_s γ_a) "(%Hm_unbox & %Hγ_d & M & #γ_dv & γ_dq & #InvD & #GC)".
+    iDestruct "Hst" as (Q tid_ghost γ_d γ_dv γ_dq γ_t γ_s γ_a) "(%Hm_unbox & %Hγ_d & M & #γ_dv & γ_dq & #InvD & #GC)".
     (* Close the invariant *)
     iModIntro. iSplitL "l_n.p↦ γ_dq M"; first by exfr.
     (* Protect the descriptor before access, with validation *)
@@ -407,7 +402,7 @@ Proof using DISJN.
     + (* Read [InjRV descr'], check whether [descr = descr'] holds *)
       destruct (decide (l_descr = l_descr')) as [<-|NEQ].
       * (* Same descriptor --> validation success *)
-        iDestruct "Hst" as (?????????) "(%Hm1_unbox & %Hγ_d & G_l_descr & #γ_dv & γ_dq & #InvD & #GC)".
+        iDestruct "Hst" as (????????) "(%Hm1_unbox & %Hγ_d & G_l_descr & #γ_dv & γ_dq & #InvD & #GC)".
         iMod (hazptr.(shield_validate) with "IHD G_l_descr S") as "[G_l_descr S]"; [solve_ndisj|].
         iModIntro. iSplitR "AU S"; first by exfr.
         wp_pures. case_bool_decide; last contradiction.
@@ -439,7 +434,7 @@ Proof using DISJN.
 
   (* Create a new [managed] for descriptor *)
   iMod (own_alloc (to_agree (#l_m, m1, n1, n2, #p)%V)) as (γ_dv) "#γ_dv"; [done|].
-  iMod (ghost_var_alloc ()) as (γ_dq) "γ_dq".
+  iMod token_alloc as (γ_dq) "γ_dq".
   remember (encode (γ_dv, γ_dq)) as γ_d eqn:Hγ_d.
   iMod (hazptr.(hazard_domain_register) node with "IHD [$l_descr↦ $†l_descr]") as "G"; [solve_ndisj|by exfr|].
   wp_apply (hazptr.(shield_set_spec) (Some _) with "IHD S_descr") as "S_descr"; [solve_ndisj|].
@@ -475,8 +470,7 @@ Proof using DISJN.
       (* Close invariant *)
       iModIntro. iSplitR "Token_t S_descr".
       { (* close outer invariant *)
-        iExists (Updating l_descr l_m m1 n1 n2 p). iFrame "l_n.p↦".
-        iExists (1/2)%Qp. rewrite Qp.half_half. iFrame "∗#%". }
+        iExists (Updating l_descr l_m m1 n1 n2 p). iFrame "∗#%". }
       wp_pures. wp_apply (complete_spec with "InvR InvD IHD Hgc InvGC [$S_descr $γ_dv]"); try done.
       iIntros "[Ht S_descr]". wp_pures.
       iMod ("Ht" with "Token_t") as "HΦ".
@@ -514,7 +508,7 @@ Proof using DISJN.
     + (* l_n ↦ InjRV l_descr'' *)
       destruct (decide (l_descr' = l_descr'')) as [<-|NEQ].
       * (* Validation success *)
-        iDestruct "Hst" as (?????????) "(%Hm1''_unbox & %Hγ_d' & G_l_descr' & #γ_dv'' & γ_dq'' & #InvD & #isGC)".
+        iDestruct "Hst" as (????????) "(%Hm1''_unbox & %Hγ_d' & G_l_descr' & #γ_dv'' & γ_dq'' & #InvD & #isGC)".
         iMod (hazptr.(shield_validate) with "IHD G_l_descr' S") as "[G_l_descr' S]"; [solve_ndisj|].
         iModIntro. iSplitL "G_l_descr' γ_dq'' l_n.p↦"; first by exfr.
         wp_pures. case_bool_decide; last contradiction. wp_pures.

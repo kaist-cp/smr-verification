@@ -181,9 +181,11 @@ Proof.
     - by iDestruct "RChain" as ([-> ->]) "_".
     - by iDestruct "RChain" as (?? [-> ->]) "_".
   }
-  iDestruct ("IH" with "[%] [%] an.n↪ RChain anD [Ms]") as ">Rest"; [exact HLan|exact HLann|rewrite !Nat.add_1_r|].
+  iMod ("IH" with "[%] [%] an.n↪ RChain anD [Ms]") as
+    (c_p i_c_p) "(c_pD & %Last & Chain)";
+    [exact HLan|exact HLann|rewrite !Nat.add_1_r|].
   { iApply (big_sepL_mono with "Ms"). iIntros (???) "?". by rewrite !Nat.add_succ_comm. }
-  iDestruct "Rest" as (c_p i_c_p) "(c_pD & %Last & Chain)". iModIntro. iExists c_p, i_c_p. iFrame "c_pD"; iSplit.
+  iModIntro. iFrame "c_pD"; iSplit.
   { iPureIntro. rewrite lookup_cons_ne_0; simpl in *; [|lia]. by rewrite Nat.sub_0_r in Last. }
   iIntros "cD". iFrame "aD". iExists an, i_an. do 2 (iSplit; [done|]). by iApply "Chain".
 Qed.

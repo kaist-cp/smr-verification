@@ -100,7 +100,7 @@ Definition rcu_base_impl Σ `{!heapGS Σ, !rcu_base_implG Σ}
   spec_rcu_base.rcu_domain_new_spec := proof_ebr_rcu_base.rcu_domain_new_spec rcu_mgmtN rcu_ptrsN DISJN (slot_bag_impl Σ) (retired_list_impl Σ);
   spec_rcu_base.rcu_domain_register := proof_ebr_rcu_base.rcu_domain_register rcu_mgmtN rcu_ptrsN DISJN (slot_bag_impl Σ) (retired_list_impl Σ);
   spec_rcu_base.guard_new_spec := proof_ebr_rcu_base.guard_new_spec rcu_mgmtN rcu_ptrsN DISJN (slot_bag_impl Σ) (retired_list_impl Σ);
-  spec_rcu_base.guard_protect := proof_ebr_rcu_base.guard_protect rcu_mgmtN rcu_ptrsN DISJN (slot_bag_impl Σ) (retired_list_impl Σ);
+  spec_rcu_base.guard_managed_notin_syn := proof_ebr_rcu_base.guard_managed_notin_syn rcu_mgmtN rcu_ptrsN DISJN (slot_bag_impl Σ);
   spec_rcu_base.guard_protect_node_info := proof_ebr_rcu_base.guard_protect_node_info rcu_mgmtN rcu_ptrsN DISJN (slot_bag_impl Σ) (retired_list_impl Σ);
   spec_rcu_base.rcu_auth_guard_subset := proof_ebr_rcu_base.rcu_auth_guard_subset rcu_mgmtN rcu_ptrsN DISJN (slot_bag_impl Σ) (retired_list_impl Σ);
   spec_rcu_base.guard_activate_spec := proof_ebr_rcu_base.guard_activate_spec rcu_mgmtN rcu_ptrsN DISJN (slot_bag_impl Σ) (retired_list_impl Σ);

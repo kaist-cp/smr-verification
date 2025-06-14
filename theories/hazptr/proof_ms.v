@@ -71,7 +71,7 @@ Definition node γcl p lv γ_p : iProp :=
     .
 
 Definition Nodes γz γcl CL ih : iProp :=
-  [∗ list] i ↦ info ∈ (drop ih CL).*1, let '(γ_p, p) := info in
+  [∗ list] i ↦ '(γ_p, p) ∈ (drop ih CL).*1,
     hazptr.(Managed) γz p γ_p nodeSize (node γcl) ∗ node_idx γ_p (ih + i).
 
 Definition QueueInternalInv qu γz γcl γh γt : iProp :=

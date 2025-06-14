@@ -79,6 +79,14 @@ Section lemmas.
     done.
   Qed.
 
+  Global Instance coP_ghost_map_elem_combine_gives γ k v1 E1 v2 E2 :
+    CombineSepGives (k ↪c[γ]{E1} v1) (k ↪c[γ]{E2} v2) ⌜E1 ## E2 ∧ v1 = v2⌝.
+  Proof.
+    rewrite /CombineSepGives. iIntros "[H1 H2]".
+    iDestruct (coP_ghost_map_elem_valid_2 with "H1 H2") as %[H1 H2].
+    eauto.
+  Qed.
+
   Lemma coP_ghost_map_elem_combine k γ E1 E2 v1 v2 :
     k ↪c[γ]{E1} v1 -∗ k ↪c[γ]{E2} v2 -∗ k ↪c[γ]{E1 ∪ E2} v1 ∗ ⌜v1 = v2⌝.
   Proof.
@@ -87,16 +95,23 @@ Section lemmas.
     rewrite coPneset_disj_union //. auto with iFrame.
   Qed.
 
+  Global Instance coP_ghost_map_elem_combine_as k γ E1 E2 v1 v2 :
+    CombineSepAs (k ↪c[γ]{E1} v1) (k ↪c[γ]{E2} v2) (k ↪c[γ]{E1 ∪ E2} v1).
+  Proof.
+    rewrite /CombineSepAs. iIntros "[H1 H2]".
+    iDestruct (coP_ghost_map_elem_combine with "H1 H2") as "[$ _]".
+  Qed.
+
   Lemma coP_ghost_map_elem_frac_ne γ k1 k2 E1 E2 v1 v2 :
     ¬ E1 ## E2 →
     k1 ↪c[γ]{E1} v1 -∗ k2 ↪c[γ]{E2} v2 -∗ ⌜k1 ≠ k2⌝.
   Proof.
     iIntros (?) "H1 H2"; iIntros (->).
-    by iDestruct (coP_ghost_map_elem_valid_2 with "H1 H2") as %[??].
+    by iCombine "H1 H2" gives %[??].
   Qed.
   Lemma coP_ghost_map_elem_ne γ k1 k2 E2 v1 v2 :
     k1 ↪c[γ] v1 -∗ k2 ↪c[γ]{E2} v2 -∗ ⌜k1 ≠ k2⌝.
-  Proof. apply coP_ghost_map_elem_frac_ne => ?. by apply: coPneset_top_disjoint. Qed.
+  Proof. apply coP_ghost_map_elem_frac_ne. by apply: coPneset_top_disjoint. Qed.
 
   (** * Lemmas about [ghost_map_auth] *)
   Lemma coP_ghost_map_alloc_strong P m :
@@ -167,6 +182,19 @@ Section lemmas.
   Proof.
     unseal. iIntros "Hauth Hel".
     by iCombine "Hauth Hel" gives %[? [??] ]%coP_gmap_view_both_dfrac_valid_L.
+  Qed.
+
+  Global Instance coP_ghost_map_lookup_combine_gives_1 {γ q m k E v} :
+    CombineSepGives (coP_ghost_map_auth γ q m) (k ↪c[γ]{E} v) ⌜m !! k = Some v⌝.
+  Proof.
+    rewrite /CombineSepGives. iIntros "[H1 H2]".
+    iDestruct (coP_ghost_map_lookup with "H1 H2") as %->. eauto.
+  Qed.
+
+  Global Instance coP_ghost_map_lookup_combine_gives_2 {γ q m k E v} :
+    CombineSepGives (k ↪c[γ]{E} v) (coP_ghost_map_auth γ q m) ⌜m !! k = Some v⌝.
+  Proof.
+    rewrite /CombineSepGives comm. apply coP_ghost_map_lookup_combine_gives_1.
   Qed.
 
   Lemma coP_ghost_map_insert {γ m} k v :

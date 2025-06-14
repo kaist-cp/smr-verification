@@ -135,7 +135,7 @@ Proof.
   rewrite !array_cons !Loc.add_assoc.
   iDestruct "st↦" as "(st.h↦ & st.of↦ & st.d↦ & _)".
   iMod (ghost_var_alloc []) as (γs) "[Hγs Hγs']".
-  iMod (ghost_map_alloc_empty) as (γof) "Hγof".
+  iMod ghost_map_alloc_empty as (γof) "Hγof".
   remember (encode (γz, γs, γof)) as γ eqn:Hγ.
   iMod (pointsto_persist with "st.d↦") as "#st.d↦".
   iMod (inv_alloc stackN _ (EStackInternalInv st γ γz γs γof) with "[st.h↦ Hγs st.of↦ Hγof]") as "#Hinv_stack".
@@ -263,7 +263,7 @@ Proof using All.
   try (iMod "Hplist"; done); last first.
   { (* empty stack case *)
     iAaccIntro with "[st.h↦]".
-    { instantiate (1 := [tele_arg None; inhabitant; 0; (λ p : blk, node p)]). simpl. iFrame. }
+    { instantiate (1 := [tele_arg None; inhabitant; inhabitant; inhabitant]). simpl. iFrame. }
     { simpl. iIntros "[st.h↦ _] !>". iFrame. }
     simpl. iIntros "[st.h↦ S]".
     iMod "AU" as (xs) "[EStack [_ Commit]]".
@@ -324,7 +324,7 @@ Proof using All.
     destruct offer_rep as [n|]; last first.
     { (* no offer *)
       iAaccIntro with "[st.of↦]".
-      { instantiate (1 := [tele_arg None; inhabitant; 0; (λ p : blk, node p)]). simpl. iFrame. }
+      { instantiate (1 := [tele_arg None; inhabitant; inhabitant; inhabitant]). simpl. iFrame. }
       { simpl. iIntros "[st.of↦ _] !>". iFrame. }
       simpl. iIntros "[st.of↦ S] !>".
       iSplitL "st.of↦ γof Hoffers Hplist st.h↦ Hγs".

@@ -305,6 +305,45 @@ Qed.
 
 End list.
 
+(* TODO: upstream *)
+Section top_lemmas.
+  Context `{TopSet A C}.
+  Implicit Types X : C.
+
+  Global Instance intersection_top_l : LeftId (≡@{C}) ⊤ (∩).
+  Proof using All. intros ?. set_solver. Qed.
+  Global Instance intersection_top_r : RightId (≡@{C}) ⊤ (∩).
+  Proof using All. intros ?. set_solver. Qed.
+
+  Global Instance union_top_l : LeftAbsorb (≡@{C}) ⊤ (∪).
+  Proof using All. intros ?. set_solver. Qed.
+  Global Instance union_top_r : RightAbsorb (≡@{C}) ⊤ (∪).
+  Proof using All. intros ?. set_solver. Qed.
+
+  Lemma top_disjoint_empty X :
+    ⊤ ## X → X ≡ ∅.
+  Proof using All. intros ?. set_solver. Qed.
+
+  Section leibniz.
+    Context `{!LeibnizEquiv C}.
+
+    Global Instance intersection_top_l_L : LeftId (=@{C}) ⊤ (∩).
+    Proof using All. intros ?. unfold_leibniz. apply (left_id _ _). Qed.
+    Global Instance intersection_top_r_L : RightId (=@{C}) ⊤ (∩).
+    Proof using All. intros ?. unfold_leibniz. apply (right_id _ _). Qed.
+
+    Global Instance union_top_l_L : LeftAbsorb (=@{C}) ⊤ (∪).
+    Proof using All. intros ?. unfold_leibniz. apply (left_absorb _ _). Qed.
+    Global Instance union_top_r_L : RightAbsorb (=@{C}) ⊤ (∪).
+    Proof using All. intros ?. unfold_leibniz. apply (right_absorb _ _). Qed.
+
+    Lemma top_disjoint_empty_L X :
+      ⊤ ## X → X = ∅.
+    Proof using All. unfold_leibniz. by apply top_disjoint_empty. Qed.
+  End leibniz.
+
+End top_lemmas.
+
 Section gset.
 
 Lemma set_map_difference {A B C D}
@@ -330,7 +369,7 @@ Lemma set_map_difference_L {A B C D}
 Proof. unfold_leibniz. by apply set_map_difference. Qed.
 
 Lemma set_map_empty_iff {A B C D}
-  `{Set_ B D, FinSet A C}
+  `{SemiSet B D, FinSet A C}
     (f : A → B) (X : C) :
   set_map (D:=D) f X ≡ ∅ ↔ X ≡ ∅.
 Proof.
@@ -342,7 +381,7 @@ Proof.
 Qed.
 
 Lemma set_map_empty_iff_L {A B C D}
-  `{Set_ B D, FinSet A C, !LeibnizEquiv D, !LeibnizEquiv C}
+  `{SemiSet B D, FinSet A C, !LeibnizEquiv D, !LeibnizEquiv C}
     (f : A → B) (X : C) :
   set_map (D:=D) f X = ∅ ↔ X = ∅.
 Proof. unfold_leibniz. by apply set_map_empty_iff. Qed.
@@ -350,9 +389,8 @@ Proof. unfold_leibniz. by apply set_map_empty_iff. Qed.
 Lemma subset_of_singleton x (X : gset nat) :
   X ⊆ {[x]} → X = ∅ ∨ X = {[x]}.
 Proof.
-  destruct (decide (X = ∅)); auto.
-  rewrite elem_of_subseteq. intros. right.
-  set_unfold. intros; split; intros; set_solver.
+  destruct (decide (X = ∅)) as [HX|HX]; [auto|].
+  set_unfold. intros. right. intros; split; set_solver.
 Qed.
 
 Lemma gset_union_difference_L' (X Y : gset nat) :
@@ -362,12 +400,12 @@ Proof. intros. rewrite (union_difference_L X Y); set_solver. Qed.
 Lemma difference_diag `{Countable A} (X Y Z : gset A) :
   X ⊆ Z → Y ⊆ Z →
   (Z ∖ X) ∖ (Z ∖ Y) = Y ∖ X.
-Proof. set_unfold. repeat (intros; split); set_solver. Qed.
+Proof. rewrite difference_difference_r_L. set_solver. Qed.
 
 Lemma difference_diag_single `{Countable A} (Y Z : gset A) :
   Y ⊆ Z →
   Z ∖ (Z ∖ Y) = Y.
-Proof. set_unfold. repeat (intros; split); set_solver. Qed.
+Proof. rewrite difference_difference_r_L. set_solver. Qed.
 
 Lemma union_differnce_subst_difference_union `{Countable A} (X Y Z : gset A) :
   (X ∪ Y) ∖ Z ⊆ (X ∖ Z) ∪ (Y ∖ X).
@@ -386,21 +424,26 @@ Lemma difference_not_in_singletion_L `{Set_ A B, !LeibnizEquiv B} (x : A) (X : B
   x ∉ X → X = X ∖ {[x]}.
 Proof. set_solver. Qed.
 
+Lemma gset_to_coPset_empty :
+  gset_to_coPset ∅ = ∅.
+Proof. unfold_leibniz. intros ?. setoid_rewrite elem_of_gset_to_coPset. done. Qed.
+
+Global Instance injective_gset_to_coPset :
+  Inj (=) (=) gset_to_coPset.
+Proof. intros ??. set_unfold. setoid_rewrite elem_of_gset_to_coPset. done. Qed.
+
 Section gmap.
 
 Lemma top_difference_dom_union_not_in_singleton {A} k (m: gmap positive A):
   m !! k = None →
   ⊤ ∖ ({[k]} ∪ (gset_to_coPset (dom m))) ∪ {[k]} = ⊤ ∖ gset_to_coPset (dom m).
 Proof.
-  intro LookupNone.
-  rewrite comm_L singleton_union_difference_L.
-  rewrite subseteq_union_1_L; last by set_solver.
-  rewrite difference_union_distr_l_L difference_diag_L union_empty_l_L.
+  intros Hk.
+  rewrite comm_L singleton_union_difference_L right_absorb_L.
+  rewrite difference_union_distr_l_L difference_diag_L left_id_L.
   f_equal.
-  assert (k ∉ gset_to_coPset (dom m)) as NotIn.
-  { intro ElemOf. rewrite elem_of_gset_to_coPset elem_of_dom in ElemOf.
-    destruct ElemOf. congruence. }
-  set_solver.
+  rewrite -difference_not_in_singletion_L //.
+  rewrite elem_of_gset_to_coPset elem_of_dom Hk //.
 Qed.
 
 Definition range_list `{Countable K} {A: Type} (m: gmap K A) : list A :=
@@ -455,7 +498,7 @@ Proof.
 Qed.
 
 Lemma range_empty `{Countable K, Countable A} :
-  (range (∅ : gmap K A)) = ∅.
+  range (∅ : gmap K A) = ∅.
 Proof. done. Qed.
 
 End gmap.
@@ -465,34 +508,30 @@ Section coPset.
 Lemma coPset_choose (E : coPset) :
   E ≠ ∅ → ∃ x, x ∈ E.
 Proof.
-  intro NonEmpty. destruct (decide (set_finite E)) as [Fin|Inf].
-  - apply dec_pred_finite_alt in Fin; last apply _.
-    destruct Fin as [xs Hxs].
-    destruct xs.
-    + exfalso. apply NonEmpty. set_solver.
-    + exists p. apply Hxs, elem_of_cons. by left.
+  intros NonEmpty. destruct (decide (set_finite E)) as [HE|HE].
+  - set_unfold.
+    setoid_rewrite <-elem_of_coPset_to_gset; last done.
+    setoid_rewrite <-elem_of_coPset_to_gset in NonEmpty; last done.
+    apply set_choose_L.
+    by set_unfold.
   - exists (coPpick E). by apply coPpick_elem_of.
 Qed.
 
 Lemma top_disjoint_difference_gset_to_coPset X :
   (⊤ ## (⊤ ∖ (gset_to_coPset X))) → False.
 Proof.
-  intro Disj.
-  assert (set_infinite (⊤ ∖ gset_to_coPset X)) as Inf.
-  { apply difference_infinite; [apply top_infinite|apply gset_to_coPset_finite]. }
-  set k := coPpick (⊤ ∖ gset_to_coPset X).
-  assert (k ∈ (⊤ ∖ gset_to_coPset X)) as In.
-  { apply coPpick_elem_of. rewrite -coPset_infinite_finite. apply Inf. }
-  rewrite elem_of_disjoint in Disj. apply (Disj k); done.
+  intros HX%top_disjoint_empty_L.
+  pose proof (empty_finite (C:=coPset)) as Hempty.
+  rewrite coPset_finite_infinite -HX in Hempty.
+  apply Hempty, difference_infinite; [apply top_infinite|apply gset_to_coPset_finite].
 Qed.
 
 Lemma top_disjoint_gset_to_coPset X :
   X ≠ ∅ →
   (⊤ ## (gset_to_coPset X)) → False.
 Proof.
-  intros NotEmpty Disj.
-  apply NotEmpty. rewrite elem_of_equiv_empty_L=> x ElemOf.
-  rewrite elem_of_disjoint in Disj. apply (Disj x); [done|by rewrite elem_of_gset_to_coPset].
+  intros ? HX%top_disjoint_empty_L. rewrite -gset_to_coPset_empty in HX.
+  by apply (inj _) in HX.
 Qed.
 
 Lemma disjoint_complement (X Y : coPset) :

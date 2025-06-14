@@ -900,7 +900,7 @@ Proof.
   }
   iModIntro. iDestruct (harris_node_combine_some with "c↦ c↪□ c.n↪rcu [$c.n↪□]") as "$"; [by iRight|].
   wp_pures.
-  wp_apply (harris_helping_cas_spec false Φ 1%positive [] with "[$G $Lc]") as ([]) "(G & D)"; simpl in *; [done|exact Hp_k|iFrame "#"|..]; wp_pures.
+  wp_apply (harris_helping_cas_spec false inhabitant inhabitant inhabitant with "[$G $Lc]") as ([]) "(G & D)"; simpl in *; [done|exact Hp_k|iFrame "#"|..]; wp_pures.
 
   1: wp_apply (rcu.(rcu_domain_retire_spec) with "IRD D") as "_"; [solve_ndisj|by rewrite harris_type_unfold|].
   all: wp_pures; wp_apply (rcu.(guard_deactivate_spec) with "IRD G") as "G"; [solve_ndisj|]; wp_pures.

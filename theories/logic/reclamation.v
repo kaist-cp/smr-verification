@@ -131,8 +131,9 @@ Definition ManagedBase (p : blk) (i : positive) (size_i : nat) R : iProp Σ :=
     p ↪c[γptrs]{{[gid]}} i ∗
     Exchanges p i γc_i ∗
     ResourceCInv p i γc_i size_i R ∗
-    i ↦p[γU]{1/2} false ∗
-    ({[i]},⊤) ↦P2[γR]{ 1/2 } false.
+    (* TODO: Why need space? Might be do to cghost_map above *)
+    i ↦p[γU] {# 1/2 } false ∗
+    ({[i]},⊤) ↦P2[γR] {# 1/2 } false.
 
 Definition RetiredBase (p : blk) (i : positive) (size_i : nat) R : iProp Σ :=
   ∃ γc_i,
@@ -141,8 +142,8 @@ Definition RetiredBase (p : blk) (i : positive) (size_i : nat) R : iProp Σ :=
     p ↪c[γptrs]{{[gid]}} i ∗
     Exchanges p i γc_i ∗
     ResourceCInv p i γc_i size_i R ∗
-    i ↦p[γU]{1/2} true ∗
-    ({[i]},⊤) ↦P2[γR]{ 1/2 } false.
+    i ↦p[γU]□ true ∗
+    ({[i]},⊤) ↦P2[γR] {# 1/2 } false.
 
 Definition Retired (p : blk) (i : positive) (size_i : nat) R : iProp Σ :=
   ∃ data_i, RetiredBase p i size_i (wrap_resource R data_i).
@@ -154,15 +155,15 @@ Definition ReclaimingBase (p : blk) (i : positive) (size_i : nat) R : iProp Σ :
     p ↪c[γptrs]{{[gid]}} i ∗
     Exchanges p i γc_i ∗
     ResourceCInv p i γc_i size_i R ∗
-    i ↦p[γU]{1/2} true.
+    i ↦p[γU]□ true.
 
 Definition Reclaiming (p : blk) (i : positive) (size_i : nat) R : iProp Σ :=
   ∃ data_i, ReclaimingBase p i size_i (wrap_resource R data_i).
 
 (* [Retired] becomes [Reclaimed]. *)
 Definition Reclaimed (i : positive) : iProp Σ :=
-  i ↦p[γU]{1/2} true ∗
-  ({[i]},⊤) ↦P2[γR]{ 1/2 } true.
+  i ↦p[γU]□ true ∗
+  ({[i]},⊤) ↦P2[γR]□ true.
 
 Definition ProtectedBase (s : nat) (i : positive) (p : blk) R size_i : iProp Σ :=
   ∃ γc_i,
@@ -171,7 +172,7 @@ Definition ProtectedBase (s : nat) (i : positive) (p : blk) R size_i : iProp Σ 
     coP_cinv_own γc_i {[ssid s]} ∗
     Exchanges p i γc_i ∗
     ResourceCInv p i γc_i size_i R ∗
-    (i, sid s) ↦p2[γV]{ 1/2 } true.
+    (i, sid s) ↦p2[γV] {# 1/2 } true.
 
 End defs.
 
@@ -415,10 +416,8 @@ Proof.
   rewrite (sids_range_cons _ _ LE12).
   rewrite -Hhomo; last apply sid_sids_range_disjoint_cons.
   iDestruct "range12" as "[$ range1'2]".
-  iSpecialize ("IH" $! (s1+1) s2 with "[%] range1'2"); first lia.
-  (* NOTE: setoid_rewrite didn't work *)
-  iApply (big_sepL_mono with "IH").
-  iIntros (k??) "?". replace (s1 + 1 + k) with (s1 + S k) by lia. done.
+  iSpecialize ("IH" $! (s1+1) s2 with "[%] range1'2"); first done.
+  iEval (setoid_rewrite <-(assoc Nat.add)) in "IH". done.
 Qed.
 
 Lemma big_sepL_sids_range_2 {PROP : bi} (Φ : coPset → PROP)
@@ -445,8 +444,7 @@ Proof.
   rewrite -Hhomo; last apply sid_sids_range_disjoint_cons.
   iDestruct "range12" as "[? range1'2]". (* Should not frame s1 here. *)
   iSpecialize ("IH" $! (s1+1) s2 with "[%] [range1'2]"); first lia.
-  { iApply (big_sepL_mono with "range1'2").
-    iIntros (k??) "?". replace (s1 + 1 + k) with (s1 + S k) by lia. done. }
+  { iEval (setoid_rewrite <-(assoc Nat.add)). done. }
   iDestruct "IH" as "[%|$]"; last by iFrame.
   subst slist12. simpl in *. assert (s2 = s1 + 1) as -> by lia.
   replace (sids_range (s1 + 1) (s1 + 1)) with (∅ : coPset); last first.
@@ -710,9 +708,7 @@ Proof.
 
     (* give p↪, cinv *)
     iCombine "pi Expi" as "Expi".
-    rewrite -coP_ghost_map_elem_fractional; auto.
     iCombine "cinv Excinv" as "Excinv".
-    rewrite -coP_cinv_own_fractional; auto.
 
     (* separate token *)
     apply coPneset_disj_elem_of in H0.
@@ -752,9 +748,7 @@ Proof.
 
     (* give p↪, cinv *)
     iCombine "Expi pi" as "pi".
-    rewrite -coP_ghost_map_elem_fractional; auto.
     iCombine "Excinv cinv" as "cinv".
-    rewrite -coP_cinv_own_fractional; auto.
 
     (* separate token *)
     rewrite (exchange_stok_get_token_set _ idx); auto.

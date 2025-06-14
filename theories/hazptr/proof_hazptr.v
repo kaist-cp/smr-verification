@@ -38,7 +38,7 @@ Local Ltac tspd := try (iSplit; [done|]); try (iSplit; [|done]).
 
   [∗ list] si ↦ slot ∈ slist, ∃ (b : bool) v (oi : option positive),
     ⌜ sbvmap !! slot = Some (b, v) ⌝ ∗
-    (sid si) ↦p[γV]{1/2} oi ∗
+    (sid si) ↦p[γV] {#1/2} oi ∗
     match oi with
     | Some i =>
         ⌜∃ info_i, info !! i = Some info_i ∧ b = true ∧ v = Some info_i.1.(addr) ⌝
@@ -57,11 +57,11 @@ But what about γR?
 *)
 Definition CC γtok γinfo γptrs γU γR γV info sbvmap slist : iProp :=
   [∗ map] i ↦ info_i ∈ info, ∃ (U : bool),
-    i ↦p[γU]{ 1/2/2 } U ∗
+    i ↦p[γU] {# 1/2/2 } U ∗
     [∗ list] si ↦ slot ∈ slist, ∃ (b : bool) v (V R : bool),
       ⌜ sbvmap !! slot = Some (b, v) ⌝ ∗
-      (i,sid si) ↦p2[γV]{ 1/2 } V ∗
-      (i,sid si) ↦p2[γR]{ 1/2 } R ∗
+      (i,sid si) ↦p2[γV] {# 1/2 } V ∗
+      (i,sid si) ↦p2[γR] {# 1/2 } R ∗
       ⌜ V → b = true ∧ v = Some info_i.1.(addr) ⌝ ∗
       ⌜ R → U ⌝ ∗
       match V, R with
@@ -73,8 +73,8 @@ Definition CC γtok γinfo γptrs γU γR γV info sbvmap slist : iProp :=
 
 Definition CU γtok γinfo γptrs γU γR γV info sbvmap slist : iProp :=
   [∗ map] i ↦ info_i ∈ info, ∃ (U R : bool),
-    i ↦p[γU]{ 1/2/2 } U ∗
-    ({[i]},sids_from (length slist)) ↦P2[γR]{ 1/2 } R ∗
+    i ↦p[γU] {# 1/2/2 } U ∗
+    ({[i]},sids_from (length slist)) ↦P2[γR] {# 1/2 } R ∗
     ({[i]},sids_from (length slist)) ↦P2[γV] false ∗
     (if R then emp else toks γtok {[i]} (sids_from (length slist))) ∗
     ⌜R → U⌝.
@@ -82,13 +82,13 @@ Definition CU γtok γinfo γptrs γU γR γV info sbvmap slist : iProp :=
 Definition UC γtok γinfo γptrs γU γR γV info sbvmap slist : iProp :=
   ([∗ list] si ↦ slot ∈ slist, ∃ (b : bool) v,
     ⌜ sbvmap !! slot = Some (b, v) ⌝) ∗
-  (⊤ ∖ gset_to_coPset (dom info)) ↦P[γU]{ 1/2 } false ∗
+  (⊤ ∖ gset_to_coPset (dom info)) ↦P[γU] {# 1/2 } false ∗
   (⊤ ∖ gset_to_coPset (dom info),sids_to (length slist)) ↦P2[γR] false ∗
-  (⊤ ∖ gset_to_coPset (dom info),sids_to (length slist)) ↦P2[γV]{ 1/2 } false ∗
+  (⊤ ∖ gset_to_coPset (dom info),sids_to (length slist)) ↦P2[γV] {# 1/2 } false ∗
   toks γtok (⊤ ∖ gset_to_coPset (dom info)) (sids_to (length slist)).
 
 Definition UU γtok γinfo γptrs γU γR γV info sbvmap slist : iProp :=
-  (⊤ ∖ gset_to_coPset (dom info)) ↦P[γU]{ 1/2 } false ∗
+  (⊤ ∖ gset_to_coPset (dom info)) ↦P[γU] {# 1/2 } false ∗
   (⊤ ∖ gset_to_coPset (dom info),sids_from (length slist)) ↦P2[γR] false ∗
   (⊤ ∖ gset_to_coPset (dom info),sids_from (length slist)) ↦P2[γV] false ∗
   toks γtok (⊤ ∖ gset_to_coPset (dom info)) (sids_from (length slist)).
@@ -102,7 +102,7 @@ Definition GhostQuadrants γtok γinfo γptrs γU γR γV info sbvmap slist : iP
 Definition InactiveShield γV sbvmap slist : iProp :=
   [∗ list] si ↦ slot ∈ slist,
     match sbvmap !! slot with
-    | Some (false, _) => (⊤,{[sid si]}) ↦P2[γV]{ 1/2 } false
+    | Some (false, _) => (⊤,{[sid si]}) ↦P2[γV] {# 1/2 } false
     | _ => emp
     end.
 
@@ -165,14 +165,14 @@ Definition Shield γz (s : loc) (st : shield_state Σ) : iProp :=
     match st with
     | Deactivated =>
         ⌜v = None⌝ ∗
-        (⊤,{[sid idx]}) ↦P2[γV]{ 1/2 } false
+        (⊤,{[sid idx]}) ↦P2[γV] {# 1/2 } false
     | NotValidated p =>
         ⌜v = Some p⌝ ∗
-        (⊤,{[sid idx]}) ↦P2[γV]{ 1/2 } false
+        (⊤,{[sid idx]}) ↦P2[γV] {# 1/2 } false
     | Validated p data_i R size_i => ∃ i,
         ⌜v = Some p⌝ ∗
         Protected γtok γinfo γdata γptrs γV idx i p data_i R size_i ∗
-        (⊤ ∖ {[i]},{[sid idx]}) ↦P2[γV]{ 1/2 } false
+        (⊤ ∖ {[i]},{[sid idx]}) ↦P2[γV] {# 1/2 } false
     end.
 
 (* Helper *)
@@ -223,15 +223,15 @@ Lemma ghost_quadrants_register i p γc_i size_p γtok γinfo γptrs γU γR γV 
   info !! i = None →
   GhostQuadrants γtok γinfo γptrs γU γR γV info hmap slist ==∗
   GhostQuadrants γtok γinfo γptrs γU γR γV (<[i := ({|addr:=p; len:=size_p|}, γc_i)]> info) hmap slist ∗
-  i ↦p[γU]{1/2} false ∗
-  ({[i]},⊤) ↦P2[γR]{ 1/2 } false ∗
+  i ↦p[γU] {# 1/2 } false ∗
+  ({[i]},⊤) ↦P2[γR] {# 1/2 } false ∗
   toks γtok {[i]} ∅.
 Proof.
   iIntros (NotIn) "(●CC & ●CU & ●UC & ●UU)".
   (** Move from [UC] to [CC] *)
   iAssert (|==> CC _ _ _ _ _ _ _ _ _ ∗ UC _ _ _ _ _ _ _ _ _ ∗ toks γtok {[i]} ∅ ∗
-    ({[i]},sids_to (length slist)) ↦P2[γR]{ 1/2 } false ∗
-    i ↦p[γU]{1/2/2} false)%I with "[●CC ●UC]" as ">($ & $ & $ & ●Cr & ●Cu)".
+    ({[i]},sids_to (length slist)) ↦P2[γR] {# 1/2 } false ∗
+    i ↦p[γU] {# 1/2/2} false)%I with "[●CC ●UC]" as ">($ & $ & $ & ●Cr & ●Cu)".
   { iDestruct "●UC" as "(#hmap & ●UCu & ●UCr & ●UCv & ●toks)".
     rewrite -(top_difference_dom_union_not_in_singleton i info); last done.
     rewrite !ghost_vars2_insert_1; [|set_solver..].
@@ -261,8 +261,8 @@ Proof.
   }
   (** Move from [UU] to [CU] *)
   iAssert (CU _ _ _ _ _ _ _ _ _ ∗ UU _ _ _ _ _ _ _ _ _ ∗
-    ({[i]},sids_from (length slist)) ↦P2[γR]{ 1/2 } false ∗
-    i ↦p[γU]{1/2/2} false)%I with "[●CU ●UU]" as "($ & $ & ●Ur & ●Uu)".
+    ({[i]},sids_from (length slist)) ↦P2[γR] {# 1/2 } false ∗
+    i ↦p[γU] {#1/2/2} false)%I with "[●CU ●UU]" as "($ & $ & ●Ur & ●Uu)".
   { unfold CU. rewrite big_sepM_insert; last by done. iFrame.
     iDestruct "●UU" as "(●UUu & ●UUr & ●UUv & ●UUt)". unfold toks.
     do 2 (rewrite bi.sep_exist_r; iExists _).
@@ -288,21 +288,21 @@ Lemma ghost_quadrants_new_slot slot γtok γinfo γptrs γU γR γV info hmap sl
   hmap !! slot = None →
   GhostQuadrants γtok γinfo γptrs γU γR γV info hmap slist -∗
   GhostQuadrants γtok γinfo γptrs γU γR γV info (<[slot := (true, None)]> hmap) (slist ++ [slot]) ∗
-  (⊤,{[sid (length slist)]}) ↦P2[γV]{ 1/2 } false.
+  (⊤,{[sid (length slist)]}) ↦P2[γV] {# 1/2 } false.
 Proof.
   iIntros (NotIn NotElem) "(●CC & ●CU & ●UC & ●UU)".
   (** Move from [UU] to [UC] *)
   iAssert (UC _ _ _ _ _ _ _ _ _ ∗ UU _ _ _ _ _ _ _ _ _ ∗
-    (⊤ ∖ gset_to_coPset (dom info),{[sid (length slist)]}) ↦P2[γV]{ 1/2 } false
+    (⊤ ∖ gset_to_coPset (dom info),{[sid (length slist)]}) ↦P2[γV] {# 1/2 } false
     )%I with "[●UC ●UU]" as "($ & $ & ●Uv)".
   { unfold UC, UU.
     iDestruct "●UC" as "(#hmap & $ & ●UCr & ●UCv & ●UCt)".
     iDestruct "●UU" as "($ & ●UUr & ●UUv & ●UUt)".
     (* Move validation flag for [slot] from [UU] to [UC] *)
     iAssert(
-      (⊤ ∖ gset_to_coPset (dom info),sids_to (length (slist ++ [slot]))) ↦P2[γV]{ 1/2 } false ∗
+      (⊤ ∖ gset_to_coPset (dom info),sids_to (length (slist ++ [slot]))) ↦P2[γV] {# 1/2 } false ∗
       (⊤ ∖ gset_to_coPset (dom info),sids_from (length (slist ++ [slot]))) ↦P2[γV] false ∗
-      (⊤ ∖ gset_to_coPset (dom info),{[sid (length slist)]}) ↦P2[γV]{ 1/2 } false
+      (⊤ ∖ gset_to_coPset (dom info),{[sid (length slist)]}) ↦P2[γV] {# 1/2 } false
     )%I with "[●UCv ●UUv]" as "($ & $ & $)".
     { rewrite length_app /= Nat.add_1_r sids_from_S.
       rewrite ghost_vars2_insert_2; [|apply sids_from_not_elem_of; lia].
@@ -357,8 +357,8 @@ Proof.
   iDestruct (ghost_vars_agree with "●loc↦pC ●loc↦pU") as %<-; [set_solver|].
   iAssert(
     ({[loc]},sids_from (length (slist ++ [slot]))) ↦P2[γV] false ∗
-    (loc,sid (length slist)) ↦p2[γV]{ 1/2 } false ∗
-    (loc,sid (length slist)) ↦p2[γV]{ 1/2 } false
+    (loc,sid (length slist)) ↦p2[γV] {# 1/2 } false ∗
+    (loc,sid (length slist)) ↦p2[γV] {# 1/2 } false
   )%I with "[●CUv]" as "(●CUv & ●v & ●CCv)".
   { rewrite length_app /= Nat.add_1_r sids_from_S.
     rewrite ghost_vars2_insert_2; [|apply sids_from_not_elem_of; lia].
@@ -443,13 +443,13 @@ Lemma ghost_quadrants_validate E γtok γinfo γptrs γU γR γV
   slist !! idx = Some slot →
   hmap !! slot = Some (true, Some z.1.(addr)) →
   GhostQuadrants γtok γinfo γptrs γU γR γV info hmap slist -∗
-  (⊤,{[sid idx]}) ↦P2[γV]{ 1/2 } false -∗
-  (i,sid idx) ↦p2[γR]{ 1/2 } false -∗
+  (⊤,{[sid idx]}) ↦P2[γV] {# 1/2 } false -∗
+  (i,sid idx) ↦p2[γR] {# 1/2 } false -∗
   |={E}=>
   GhostQuadrants γtok γinfo γptrs γU γR γV info hmap slist ∗
-  (⊤ ∖ {[i]},{[sid idx]}) ↦P2[γV]{ 1/2 } false ∗
-  (i,sid idx) ↦p2[γV]{ 1/2 } true ∗
-  (i,sid idx) ↦p2[γR]{ 1/2 } false ∗
+  (⊤ ∖ {[i]},{[sid idx]}) ↦P2[γV] {# 1/2 } false ∗
+  (i,sid idx) ↦p2[γV] {# 1/2 } true ∗
+  (i,sid idx) ↦p2[γR] {# 1/2 } false ∗
   stok γtok i idx.
 Proof.
   iIntros (Hi Hl Hm) "(●CC & ●CU & ●UC & ●UU) ●TI R".
@@ -476,9 +476,9 @@ Lemma ghost_quadrants_set idx slot v b v' b' γtok γinfo γptrs γU γR γV inf
   slist !! idx = Some slot →
   hmap !! slot = Some (b', v') →
   GhostQuadrants γtok γinfo γptrs γU γR γV info hmap slist -∗
-  (⊤,{[sid idx]}) ↦P2[γV]{ 1/2 } false -∗
+  (⊤,{[sid idx]}) ↦P2[γV] {# 1/2 } false -∗
   GhostQuadrants γtok γinfo γptrs γU γR γV info (<[slot:=(b, v)]> hmap) slist ∗
-  (⊤,{[sid idx]}) ↦P2[γV]{ 1/2 } false.
+  (⊤,{[sid idx]}) ↦P2[γV] {# 1/2 } false.
 Proof.
   iIntros (NoDup Hidx Hslot) "(●CC & $ & (#hmap & $ & $) & $) ●v".
   rewrite -assoc bi.sep_comm -assoc.
@@ -539,11 +539,11 @@ Lemma ghost_quadrants_invalidate E γtok γinfo γptrs γU γR γV info hmap sli
   slist !! idx = Some slot →
   hmap !! slot = Some (true, Some info_i.1.(addr)) →
   GhostQuadrants γtok γinfo γptrs γU γR γV info hmap slist -∗
-  (i,sid idx) ↦p2[γV]{ 1/2 } true -∗
+  (i,sid idx) ↦p2[γV] {# 1/2 } true -∗
   stok γtok i idx -∗
   |={E}=>
   GhostQuadrants γtok γinfo γptrs γU γR γV info hmap slist ∗
-  (i,sid idx) ↦p2[γV]{ 1/2 } false.
+  (i,sid idx) ↦p2[γV] {# 1/2 } false.
 Proof.
   iIntros (Hi Hidx Hslot) "[●CC $] ●v T". unfold CC.
   iDestruct (big_sepM_delete with "●CC") as "[●Ci ●CC]"; eauto.
@@ -568,13 +568,13 @@ Lemma ghost_quadrants_retire E γtok γinfo γptrs γU γR γV
     info hmap slist i :
   NoDup slist →
   is_Some (info !! i) →
-  ({[i]},⊤) ↦P2[γR]{ 1/2 } false -∗
+  ({[i]},⊤) ↦P2[γR] {# 1/2 } false -∗
   GhostQuadrants γtok γinfo γptrs γU γR γV info hmap slist -∗
-  i ↦p[γU]{1/2} false -∗
+  i ↦p[γU] {#1/2} false -∗
   |={E}=>
-  ({[i]},⊤) ↦P2[γR]{ 1/2 } false ∗
+  ({[i]},⊤) ↦P2[γR] {# 1/2 } false ∗
   GhostQuadrants γtok γinfo γptrs γU γR γV info hmap slist ∗
-  i ↦p[γU]{1/2} true.
+  i ↦p[γU] {#1/2} true.
 Proof.
   iIntros (ND [info_i Hinfo_i]) "●IT (●CC & ●CU & ●UC & ●UU) U".
   iDestruct (big_sepM_delete with "●CC") as "[CCi ●CC]"; eauto.
@@ -682,7 +682,7 @@ Lemma inactive_shield_drop γV sbvmap slist si slot v :
   slist !! si = Some slot →
   sbvmap !! slot = Some (true, v) →
   InactiveShield γV sbvmap slist -∗
-  (⊤,{[sid si]}) ↦P2[γV]{ 1/2 } false -∗
+  (⊤,{[sid si]}) ↦P2[γV] {# 1/2 } false -∗
   InactiveShield γV (<[slot:=(false, None)]> sbvmap) slist.
 Proof.
   iIntros "%NoDup %HL %HM ISh ●si".
@@ -707,7 +707,7 @@ Lemma inactive_shield_activate γV sbvmap slist si slot v :
   sbvmap !! slot = Some (false, None) →
   InactiveShield γV sbvmap slist -∗
   InactiveShield γV (<[slot:=(true, v)]> sbvmap) slist ∗
-  (⊤,{[sid si]}) ↦P2[γV]{ 1/2 } false.
+  (⊤,{[sid si]}) ↦P2[γV] {# 1/2 } false.
 Proof.
   iIntros "%HL %HM ISh".
   iDestruct (big_sepL_delete with "ISh") as "[ISlot ISh]"; first apply HL.
@@ -915,7 +915,7 @@ Proof.
   wp_lam. wp_pures. wp_load. wp_let.
   iAssert ((s +ₗ 0) ↦ #slot -∗ †s…shieldSize -∗
     sbs.(Slot) γsb slot idx v -∗
-    (⊤,{[sid idx]}) ↦P2[γV]{ 1/2 } false -∗
+    (⊤,{[sid idx]}) ↦P2[γV] {# 1/2 } false -∗
     (Shield γd s
          match p with
          | Some p' => NotValidated p'
@@ -1020,7 +1020,7 @@ Proof.
   wp_lam. wp_op. wp_load. wp_let.
   iAssert ((s +ₗ 0) ↦ #slot -∗ †s…shieldSize -∗
     sbs.(Slot) γsb slot idx None -∗
-    (⊤,{[sid idx]}) ↦P2[γV]{ 1/2 } false -∗
+    (⊤,{[sid idx]}) ↦P2[γV] {# 1/2 } false -∗
     (True -∗ Φ #()) -∗
     WP slot_drop #slot;; Free #shieldSize #s @ E {{ v, Φ v }}
   )%I as "drop".
@@ -1041,7 +1041,7 @@ Proof.
   }
   iAssert ((s +ₗ 0) ↦ #slot -∗ †s…shieldSize -∗
     sbs.(Slot) γsb slot idx v -∗
-    (⊤,{[sid idx]}) ↦P2[γV]{ 1/2 } false -∗
+    (⊤,{[sid idx]}) ↦P2[γV] {# 1/2 } false -∗
     (True -∗ Φ #()) -∗
     WP slot_unset #slot;; slot_drop #slot;; Free #1 #s @ E {{ v, Φ v }}
   )%I as "unset_drop".
@@ -1118,7 +1118,7 @@ Proof.
 
   iAssert ((s +ₗ 0) ↦ #slot -∗ †s…shieldSize -∗
     sbs.(Slot) γsb slot idx v -∗
-    (⊤,{[sid idx]}) ↦P2[γV]{ 1/2 } false -∗
+    (⊤,{[sid idx]}) ↦P2[γV] {# 1/2 } false -∗
     (Shield γd s Deactivated -∗ Φ #()) -∗
     WP slot_unset #slot @ E {{ v, Φ v }}
   )%I as "slot_unset".
@@ -1188,29 +1188,27 @@ Proof.
   iIntros "#IHD Sh" (Φ) "AU".
   wp_lam. wp_pures.
 
-  wp_bind (! _)%E. iMod "AU" as (pa1 γ1 size1 R1) "[[a↦ pa1↦] [Abort _]]".
-  wp_load. iMod ("Abort" with "[$a↦ $pa1↦]") as "AU".
+  wp_bind (! _)%E. iMod "AU" as (pa1 γ size R) "[[a↦ pa1↦] [Abort _]]".
+  wp_load. iMod ("Abort" with "[$a↦ $pa1↦]") as "AU". clear γ size R.
   iModIntro. wp_let.
 
-  unfold shield_protect_loop. iLöb as "IH" forall (pa1 s_st). wp_rec. wp_pures.
+  iLöb as "IH" forall (pa1 s_st). wp_lam. wp_pures.
   wp_apply (shield_set_spec with "IHD [$Sh]") as "Sh"; [solve_ndisj..|].
   wp_seq.
 
-  wp_bind (! _)%E. iMod "AU" as (pa2 γ2 size2 R2) "[[a↦ pa2↦] CloseAU]".
-  case (decide (pa1 = pa2)) as [->|NE]; [destruct pa2|]; wp_load.
-  - iMod (shield_validate with "IHD pa2↦ Sh") as "[pa2↦ S]"; [solve_ndisj|].
+  wp_bind (! _)%E. iMod "AU" as (pa2 γ size R) "[[a↦ pa2↦] CloseAU]".
+  case (decide (pa1 = pa2)) as [->|NE]; [destruct pa2 as [pa2|]|]; wp_load.
+  - iMod (shield_validate with "IHD pa2↦ Sh") as "[pa2↦ Sh]"; [solve_ndisj|].
     iDestruct "CloseAU" as "[_ Commit]".
-    iMod ("Commit" with "[$a↦ $pa2↦ $S]") as "HΦ".
-    iModIntro. wp_pures.
-    by iApply "HΦ".
+    iMod ("Commit" with "[$a↦ $pa2↦ $Sh]") as "HΦ".
+    iModIntro. wp_pures. iApply "HΦ".
   - iDestruct "CloseAU" as "[_ Commit]".
     iMod ("Commit" with "[$a↦ $Sh]") as "HΦ".
-    iModIntro. wp_let. wp_op. wp_if. by iApply "HΦ".
+    iModIntro. wp_pures. iApply "HΦ".
   - iDestruct "CloseAU" as "[Abort _]".
     iMod ("Abort" with "[$a↦ $pa2↦]") as "AU".
-    iModIntro. wp_let. wp_op.
-    rewrite bool_decide_eq_false_2 //. wp_if.
-    iApply ("IH" with "Sh"). auto.
+    iModIntro. wp_pures. rewrite bool_decide_eq_false_2 //. wp_pures.
+    iApply ("IH" with "Sh AU").
 Qed.
 
 Lemma shield_acc :
@@ -1302,6 +1300,8 @@ Proof.
   { iModIntro. repeat exfr. }
   iMod (ghost_quadrants_retire with "GR ●Q GU") as "(GR & ●Q & GU)"; auto.
 
+  iMod (ghost_vars_persist with "GU") as "#GU".
+
   iModIntro. iSplitL; last first.
   { iIntros "HΦ". by iApply "HΦ". }
   repeat (exfr; tspd).
@@ -1314,15 +1314,15 @@ Definition SnapshotLoopInv_r γtok γinfo γdata γptrs γU γR
   ∃ i R,
     Reclaiming (mgmtN N) (ptrsN N) γtok γinfo γdata γptrs γU r i len R ∗
     (* tokens that we've taken from hazard bag head *)
-    ({[i]},sids_from slen) ↦P2[γR]{ 1/2 } true ∗
+    ({[i]},sids_from slen) ↦P2[γR] {# 1/2 } true ∗
     toks γtok {[i]} (sids_from slen) ∗
     (* slots that we haven't checked yet *)
-    ({[i]},sids_to rem) ↦P2[γR]{ 1/2 } false ∗
+    ({[i]},sids_to rem) ↦P2[γR] {# 1/2 } false ∗
     (* tokens taken from shields that were not protecting [i]. *)
     if bool_decide (Some r ∈ snap) then
-      ({[i]},sids_range rem slen) ↦P2[γR]{ 1/2 } false
+      ({[i]},sids_range rem slen) ↦P2[γR] {# 1/2 } false
     else
-      ({[i]},sids_range rem slen) ↦P2[γR]{ 1/2 } true ∗
+      ({[i]},sids_range rem slen) ↦P2[γR] {# 1/2 } true ∗
       toks γtok {[i]} (sids_range rem slen)
   .
 
@@ -1339,16 +1339,16 @@ Definition AddIfActivePost_r γtok γinfo γdata γptrs γU γR
   ∃ i R,
     Reclaiming (mgmtN N) (ptrsN N) γtok γinfo γdata γptrs γU r i len R ∗
     (* tokens that we've taken from hazard bag head *)
-    ({[i]},sids_from slen) ↦P2[γR]{ 1/2 } true ∗
+    ({[i]},sids_from slen) ↦P2[γR] {# 1/2 } true ∗
     toks γtok {[i]} (sids_from slen) ∗
     (* slots that we haven't checked yet *)
-    ({[i]},sids_to rem') ↦P2[γR]{ 1/2 } false ∗
+    ({[i]},sids_to rem') ↦P2[γR] {# 1/2 } false ∗
     if bool_decide (Some r ∈ snap) || (act && bool_decide (hz = Some r)) then
       (* protected by any of checkd slots *)
-      ({[i]},sids_range rem' slen) ↦P2[γR]{ 1/2 } false
+      ({[i]},sids_range rem' slen) ↦P2[γR] {# 1/2 } false
     else
       (* not protected *)
-      ({[i]},sids_range rem' slen) ↦P2[γR]{ 1/2 } true ∗
+      ({[i]},sids_range rem' slen) ↦P2[γR] {# 1/2 } true ∗
       toks γtok {[i]} (sids_range rem' slen) %I .
 
 Definition AddIfActivePost γtok γinfo γdata γptrs γU γR
@@ -1416,12 +1416,12 @@ Proof.
   iAssert ( |==>
     ([∗ list] k↦y ∈ drop rem' slist1, ∃ b v (V R : bool),
       ⌜sbvmap !! y = Some (b, v)⌝ ∗
-      (i,sid (rem' + k)) ↦p2[γV]{ 1/2 } V ∗
-      (i,sid (rem' + k)) ↦p2[γR]{ 1/2 } R ∗
+      (i,sid (rem' + k)) ↦p2[γV] {# 1/2 } V ∗
+      (i,sid (rem' + k)) ↦p2[γR] {# 1/2 } R ∗
       ⌜V → b = true ∧ v = Some r⌝ ∗
       ⌜R → true⌝ ∗
       (if V then if R then False else emp else if R then emp else stok γtok i (rem' + k)) ) ∗
-      ({[i]},sids_range rem' slen1) ↦P2[γR]{ 1/2 } false
+      ({[i]},sids_range rem' slen1) ↦P2[γR] {# 1/2 } false
   )%I with "[CC_i_rem'_1 γR_R_rem' range_rem'1_1]" as ">[CC_i_rem'_1 range_rem'_1]".
   { rewrite -Nat.add_1_r.
     rewrite (sids_range_cons rem'); last lia.
@@ -1442,7 +1442,7 @@ Proof.
     { by rewrite length_drop. }
     have ? : dropped ≠ [].
     { move => /(f_equal length) /=. lia. }
-    iDestruct (big_sepL_sids_range_1 (λ E, ({[i]},E) ↦P2[γR]{ 1/2 } true)
+    iDestruct (big_sepL_sids_range_1 (λ E, ({[i]},E) ↦P2[γR] {# 1/2 } true)
       _ _ dropped with "γR_R_rem'1_1") as "γR_R_rem'1_1";
       [by auto using ghost_vars2_union_2 | done | ].
     iDestruct (big_sepL_sids_range_1 (λ E, toks γtok {[i]} E)
@@ -1450,10 +1450,10 @@ Proof.
       [by auto using toks_union_2 | done | ].
     set LEFT := (LEFT in (|==> LEFT ∗ _)%I).
     iAssert (|==> LEFT ∗
-      [∗ list] k↦x ∈ dropped, (i,sid (rem' + 1 + k)) ↦p2[γR]{ 1/2 } false
+      [∗ list] k↦x ∈ dropped, (i,sid (rem' + 1 + k)) ↦p2[γR] {# 1/2 } false
     )%I with "[-]" as ">[$ γR_R_rem'1_1]"; last first.
     { iModIntro.
-      iApply (big_sepL_sids_range_2 (λ E, ({[i]},E) ↦P2[γR]{ 1/2 } false)
+      iApply (big_sepL_sids_range_2 (λ E, ({[i]},E) ↦P2[γR] {# 1/2 } false)
         _ _ dropped with "γR_R_rem'1_1");
         [by auto using ghost_vars2_union_2 | done | done]. }
     subst LEFT.
@@ -1524,12 +1524,12 @@ Proof.
   iAssert ( |==>
     ([∗ list] k↦y ∈ drop rem' slist1, ∃ b v (V R : bool),
       ⌜sbvmap !! y = Some (b, v)⌝ ∗
-      (i,sid (rem' + k)) ↦p2[γV]{ 1/2 } V ∗
-      (i,sid (rem' + k)) ↦p2[γR]{ 1/2 } R ∗
+      (i,sid (rem' + k)) ↦p2[γV] {# 1/2 } V ∗
+      (i,sid (rem' + k)) ↦p2[γR] {# 1/2 } R ∗
       ⌜V → b = true ∧ v = Some r⌝ ∗
       ⌜R → true⌝ ∗
       (if V then if R then False else emp else if R then emp else stok γtok i (rem' + k)) ) ∗
-      ({[i]},sids_range rem' slen1) ↦P2[γR]{ 1/2 } true ∗
+      ({[i]},sids_range rem' slen1) ↦P2[γR] {# 1/2 } true ∗
       toks γtok {[i]} (sids_range rem' slen1)
   )%I with "[CC_i_rem'_1 γR_R_rem' range_rem'1_1]" as ">[CC_i_rem'_1 range_rem'_1]".
   { rewrite -Nat.add_1_r.
@@ -1584,7 +1584,7 @@ Lemma hazard_bag_snapshot_spec :
           Retired (mgmtN N) (ptrsN N) γtok γinfo γdata γptrs γU γR r i len R
         else
           Reclaiming (mgmtN N) (ptrsN N) γtok γinfo γdata γptrs γU r i len R ∗
-          ({[i]},⊤) ↦P2[γR]{ 1/2 } true ∗
+          ({[i]},⊤) ↦P2[γR] {# 1/2 } true ∗
           toks γtok {[i]} ⊤)
   }}}.
 Proof.
@@ -1609,8 +1609,8 @@ Proof.
     CU γtok γinfo γptrs γU γR γV info1 sbvmap1 slist1 ∗
     ([∗ list] rle ∈ rs, let '(r,len,_) := rle in ∃ i R,
       Reclaiming (mgmtN N) (ptrsN N) γtok γinfo γdata γptrs γU r i len R ∗
-      ({[i]},sids_to slen1) ↦P2[γR]{ 1/2 } false ∗
-      ({[i]},sids_from slen1) ↦P2[γR]{ 1/2 } true ∗
+      ({[i]},sids_to slen1) ↦P2[γR] {# 1/2 } false ∗
+      ({[i]},sids_from slen1) ↦P2[γR] {# 1/2 } true ∗
       toks γtok {[i]} (sids_from slen1))
   )%I with "[●info CU Reclaiming]" as ">(●info & CU & Reclaiming)".
   { (* Can use [big_sepL_mono], but need to fully spell out the goal since I need the update. *)
@@ -1634,6 +1634,7 @@ Proof.
     { iExists true,true. by iFrame. }
     fold (CU γtok γinfo γptrs γU γR γV info1 sbvmap1 slist1).
     iMod ("IH" with "●info CU Reclaiming'") as "{IH} ($ & $ & $)".
+    iMod (ghost_vars_persist with "γU_R") as "γU_R".
     iModIntro. iExists i. iFrame "toks_ex γR_R_ex γR_R_s".
     iExists data_i,γc_i,R. iFrame. }
 
@@ -1656,9 +1657,9 @@ Proof.
         ([∗ list] rle ∈ rs, let '(r,len,_) := rle in ∃ i R,
           Reclaiming (mgmtN N) (ptrsN N) γtok γinfo γdata γptrs γU r i len R ∗
           if bool_decide (Some r ∈ snap') then
-            ({[i]},⊤) ↦P2[γR]{ 1/2 } false
+            ({[i]},⊤) ↦P2[γR] {# 1/2 } false
           else
-            ({[i]},⊤) ↦P2[γR]{ 1/2 } true ∗
+            ({[i]},⊤) ↦P2[γR] {# 1/2 } true ∗
             toks γtok {[i]} ⊤)
     }}}; last first.
   { (* loop postcondition implies snapshot postcondition *)
@@ -1722,7 +1723,7 @@ Proof.
     rewrite -toks_union_2; last by apply sids_range_sids_from_disjoint.
     iDestruct "γR_from1" as "[γR_range12 γR_from2]".
     iDestruct "toks_from1" as "[toks_range12 toks_from2]".
-    iDestruct (big_sepL_sids_range_1 (λ E, ({[i]},E) ↦P2[γR]{ 1/2 } true)
+    iDestruct (big_sepL_sids_range_1 (λ E, ({[i]},E) ↦P2[γR] {# 1/2 } true)
       slen1 slen2 slist12 with "γR_range12") as "γR_range12";
       [by auto using ghost_vars2_union_2 | done | ].
     iDestruct (big_sepL_sids_range_1 (λ E, toks γtok {[i]} E)
@@ -1738,7 +1739,7 @@ Proof.
     (* Return toks_range12 to CC *)
     iAssert ( |==>
       CC γtok γinfo γptrs γU γR γV info2 sbvmap2 slist2 ∗
-      [∗ list] k↦x ∈ slist12, (i,sid (slen1 + k)) ↦p2[γR]{ 1/2 } false
+      [∗ list] k↦x ∈ slist12, (i,sid (slen1 + k)) ↦p2[γR] {# 1/2 } false
     )%I with "[CC R_range12]" as ">[CC γR_range12]".
     { unfold CC.
       rewrite (big_sepM_delete _ _ _ _ Hi) /=.
@@ -1762,7 +1763,7 @@ Proof.
     (* Return toks_from2 *)
     iAssert ( |==>
       CU γtok γinfo γptrs γU γR γV info2 sbvmap2 slist2 ∗
-      ({[i]},sids_from slen2) ↦P2[γR]{ 1/2 } false
+      ({[i]},sids_from slen2) ↦P2[γR] {# 1/2 } false
     )%I with "[CU γR_from2 toks_from2]" as ">[CU γR_from2]".
     { unfold CU.
       rewrite (big_sepM_delete _ _ _ _ Hi) /=.
@@ -1788,7 +1789,7 @@ Proof.
     (* The annoying part. Can't convert [big_opL] to [ghost_vars2_set] if empty. *)
     destruct slist12.
     { list_simplifier. assert (slen1 = slen2) as -> by lia. iFrame. }
-    iPoseProof (big_sepL_sids_range_2 (λ E, ({[i]},E) ↦P2[γR]{ 1/2 } false)
+    iPoseProof (big_sepL_sids_range_2 (λ E, ({[i]},E) ↦P2[γR] {# 1/2 } false)
       slen1 slen2 with "γR_range12") as "γR_range12";
       [by auto using ghost_vars2_union_2 | done | done | ].
     rewrite (sids_from_prefix slen1 slen2); last done.
@@ -2046,7 +2047,6 @@ Proof.
     (* eject freeable info from the invariant *)
     iMod (exchange_toks_give_all with "Ex T") as "[rei cinv]"; [solve_ndisj|].
     iCombine "Gcinv cinv" as "cinv".
-    rewrite -coP_cinv_own_fractional; last set_solver.
     rewrite -top_complement_singleton.
     iMod (coP_cinv_cancel with "CInv cinv") as "P"; [solve_ndisj|].
       iDestruct "P" as (?) "(><- & R & >r1↦)".
@@ -2054,7 +2054,7 @@ Proof.
       rewrite Hi in Hi'. injection Hi' as [= ->]. simpl.
 
     (* close *)
-    iDestruct (coP_ghost_map_elem_combine with "r1i rei") as "[ri _]".
+    iCombine "r1i rei" as "ri".
     rewrite -top_complement_singleton.
     iMod (coP_ghost_map_delete with "coM ri") as "coM".
     wp_free.

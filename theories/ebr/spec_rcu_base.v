@@ -96,17 +96,11 @@ Definition guard_activate_spec' : Prop :=
     guard_activate #g @ E
   {{{ γg Syn, RET #(); BaseGuard γe γg g Syn ∅ }}}.
 
-Definition guard_protect' :=
-  ∀ E γe d p i_p size_p R γg g Syn G,
-  ↑(to_baseN mgmtN) ⊆ E →
-  IsRCUDomain γe d -∗
+Definition guard_managed_notin_syn' :=
+  ∀ γe p i_p size_p R γg g Syn G,
   BaseManaged γe p i_p size_p R -∗
-  BaseGuard γe γg g Syn G ={E}=∗
-  BaseManaged γe p i_p size_p R ∗
-  BaseGuard γe γg g Syn (<[ p := i_p ]> G) ∗
-  ⌜i_p ∉ Syn⌝ ∗
-  ⌜is_Some (G !! p) → G !! p = Some i_p⌝
-  .
+  BaseGuard γe γg g Syn G -∗
+  ⌜i_p ∉ Syn⌝.
 
 Definition guard_protect_node_info' :=
   ∀ E γe d p i_p size_p R γg g Syn G,
@@ -221,7 +215,7 @@ Record rcu_base_spec {Σ} `{!heapGS Σ} {mgmtN ptrsN : namespace} : Type := RCUB
   rcu_domain_new_spec : rcu_domain_new_spec' mgmtN ptrsN rcu_spec_code.(rcu_domain_new) IsRCUDomain RCUAuth;
   rcu_domain_register : rcu_domain_register' mgmtN ptrsN IsRCUDomain RCUAuth BaseManaged;
   guard_new_spec : guard_new_spec' mgmtN ptrsN rcu_spec_code.(guard_new) IsRCUDomain BaseInactive;
-  guard_protect : guard_protect' mgmtN ptrsN IsRCUDomain BaseManaged BaseGuard;
+  guard_managed_notin_syn : guard_managed_notin_syn' mgmtN ptrsN BaseManaged BaseGuard;
   guard_protect_node_info : guard_protect_node_info' mgmtN ptrsN IsRCUDomain BaseGuard BaseNodeInfo BaseGuardedNodeInfo;
   rcu_auth_guard_subset: rcu_auth_guard_subset' mgmtN ptrsN IsRCUDomain RCUAuth BaseGuard;
   guard_activate_spec : guard_activate_spec' mgmtN ptrsN rcu_spec_code.(guard_activate) IsRCUDomain BaseInactive BaseGuard;

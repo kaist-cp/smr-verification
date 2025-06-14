@@ -1310,7 +1310,7 @@ Section proof.
           iDestruct (dqst_archived_get_array with "Arch") as "Parr".
         iInv "S" as (lv) "(_ & C4 & node & S)".
           iDestruct "node" as (l4') ">(%Hlen4' & man')". subst lv.
-          iDestruct (persistent_ghost_var_agree with "Parr man'") as "%". subst l4'.
+          iCombine "Parr man'" gives %[_ ?]. subst l4'.
           rewrite array_cons. iDestruct "C4" as "[Sz4 A4]".
           replace (C3 +ₗ 1) with C3arr...
         iApply (wp_load_offset with "A4")...

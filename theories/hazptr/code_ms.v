@@ -65,11 +65,11 @@ Definition queue_pop_loop : val :=
       after successfully updating the head pointer, right before retiring. In
       that case, the tail pointer may temporarily lag behind the head
       pointer. *)
-      let: "tail" := !("queue" +ₗ #tail) in (* #4 *)
+      let: "tail" := !("queue" +ₗ #tail) in (* #3 *)
       (if: "head" = "tail" then
-        CAS ("queue" +ₗ #tail) "tail" "next" else #());; (* #5 *)
+        CAS ("queue" +ₗ #tail) "tail" "next" else #());; (* #4 *)
       (* Update head pointer to the next node. *)
-      if: CAS ("queue" +ₗ #head) "head" "next" then (* #6 *)
+      if: CAS ("queue" +ₗ #head) "head" "next" then (* #5 *)
         let: "data" := !("next" +ₗ #data) in
         hazptr.(hazard_domain_retire) !("queue" +ₗ #domain) "head" #nodeSize;;
         SOME "data"

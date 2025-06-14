@@ -71,9 +71,9 @@ Proof.
   iMod (ghost_map_alloc ∅) as (γdata) "[data _]".
   remember (encode (γb,γdata)) as γd eqn:Hγd.
   iMod (inv_alloc ((mgmtN N).@"simpl") _ (∃ Im Dm Rs, RCUInv γb γdata Im Dm Rs) with "[data BR]") as "#?".
-  { iNext. repeat iExists _. iFrame. by rewrite !dom_empty_L. }
+  { iFrame. by rewrite !dom_empty_L. }
 
-  iApply "HΦ". repeat iExists _. by iFrame (Hγd) "∗#".
+  iApply "HΦ". by iFrame (Hγd) "∗#".
 Qed.
 
 Lemma rcu_domain_register :
@@ -88,17 +88,14 @@ Proof.
   iMod (spec_rcu_base.rcu_domain_register base (λ p lv i, i ↪[γdata]□ γ_p ∗ R p lv γ_p)%I
         (dom Dm)
         (λ i, ghost_map_auth γdata 1 (<[i := γ_p]> Dm) ∗ i ↪[γdata]□ γ_p)%I
-      with "BIRD BRA p↦ †p [data $R]") as "OUT"; [solve_ndisj..| |].
+      with "BIRD BRA p↦ †p [data $R]") as (i Hi) "(BRA & BM & [data #i↪□])"; [solve_ndisj..| |].
   { iIntros (i Hi).
     by iMod (ghost_map_insert_persist i γ_p with "data") as "[$ #$]"; [by apply not_elem_of_dom|].
   }
-  iDestruct "OUT" as (i Hi) "(BRA & BM & [data #i↪□])".
 
   iModIntro. iSplitL "BRA data".
-  { iNext. repeat iExists _. iFrame.
-    iPureIntro. rewrite !dom_insert_L. set_solver.
-  }
-  iModIntro. repeat iExists _. iFrame (Hγd) "∗#".
+  { iFrame. iPureIntro. rewrite !dom_insert_L. set_solver. }
+  iModIntro. iFrame (Hγd) "∗#".
 Qed.
 
 Lemma guard_new_spec :
@@ -110,8 +107,7 @@ Proof.
 
   wp_apply (spec_rcu_base.guard_new_spec with "BIRD [//]") as (g) "BG"; [solve_ndisj|].
 
-  iApply "HΦ".
-  repeat iExists _. iFrame (Hγd) "∗".
+  iApply "HΦ". iFrame (Hγd) "∗".
 Qed.
 
 Lemma guard_activate_spec :
@@ -124,9 +120,7 @@ Proof.
 
   wp_apply (spec_rcu_base.guard_activate_spec with "BIRD BG") as (γg Syn) "BG"; [solve_ndisj|].
 
-  iApply "HΦ".
-  repeat iExists _. iFrame (Hγd) "∗".
-  repeat iExists _. by iFrame "∗".
+  iApply "HΦ". iFrame (Hγd) "∗". by iExists ∅.
 Qed.
 
 Lemma guard_managed_agree :
@@ -152,20 +146,19 @@ Proof.
   iDestruct "G" as (??? Syn G Gb) "[BG #GInfo]".
   iDestruct "M" as (????) "[#i↪□ BM]". do 2 encode_agree Hγd.
 
-  iMod (spec_rcu_base.guard_protect with "BIRD BM BG") as "(BM & BG & %NotIn & %LookUp)"; [solve_ndisj|].
+  iDestruct (spec_rcu_base.guard_managed_notin_syn with "BM BG") as %NotIn.
   iDestruct (spec_rcu_base.managed_get_node_info with "BM") as "#BInfo".
-  iMod (spec_rcu_base.guard_protect_node_info with "BIRD BInfo BG") as "(BG & #BGInfo & _)"; [solve_ndisj|done|].
-  rewrite insert_insert.
+  iMod (spec_rcu_base.guard_protect_node_info with "BIRD BInfo BG") as "(BG & #BGInfo & %LookUp)"; [solve_ndisj|done|].
 
   iModIntro. iSplitL "BM".
-  { repeat iExists _; iFrame (Hγd) "∗#". }
+  { iFrame (Hγd) "∗#". }
 
   iDestruct (big_sepM2_dom with "GInfo") as %Hdom.
   destruct (decide (is_Some (Gb !! p))) as [Hp|Hp%eq_None_not_Some]; last first.
   { assert (G !! p = None).
     { by rewrite -not_elem_of_dom Hdom not_elem_of_dom. }
 
-    iSplit; repeat iExists _; iFrame (Hγd) "∗#".
+    iSplit; iFrame (Hγd) "∗#".
     iExists (<[ p:= _ ]> G).
 
     rewrite (big_sepM2_insert _ _ _ p); [|done..].
@@ -178,7 +171,7 @@ Proof.
   iDestruct (big_sepM2_lookup_r with "GInfo") as (? HGp) "#i↪□'"; [exact HGbp|].
   iDestruct (ghost_map_elem_agree with "i↪□ i↪□'") as %<-.
 
-  iSplit; repeat iExists _; iFrame (Hγd) "∗#".
+  iSplit; iFrame (Hγd) "∗#".
 Qed.
 
 Lemma guard_acc :
@@ -247,8 +240,7 @@ Proof.
   wp_apply (spec_rcu_base.guard_deactivate_spec with "BIRD BG") as "BG"; [solve_ndisj|].
 
 
-  iApply "HΦ".
-  repeat iExists _. iFrame (Hγd) "∗".
+  iApply "HΦ". iFrame (Hγd) "∗".
 Qed.
 
 Lemma guard_drop_spec :

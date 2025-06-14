@@ -88,7 +88,6 @@ Definition rcu_domain_register' : Prop :=
   ↑(mgmtN N) ⊆ E →
   ty.(ty_sz) = length lv →
   ty.(ty_sz) = length succs →
-  ty.(ty_sz) > 0 →
   IsRCUDomain γd d -∗
   p ↦∗ lv -∗ †p…(length lv) -∗
   (* NOTE: Can't let client modify the link, because that requires opening

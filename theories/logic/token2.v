@@ -10,7 +10,7 @@ Definition token2R : ucmra :=
   (positive * positive) -d> optionUR $ exclR $ unitO.
 
 Definition to_token2 (E1 E2 : coPset) : token2R :=
-  λ k, if bool_decide (k.1 ∈ E1 ∧ k.2 ∈ E2)
+  λ k, if decide (k.1 ∈ E1 ∧ k.2 ∈ E2)
        then Excl' ()
        else None.
 
@@ -22,24 +22,29 @@ Section token2R_lemmas.
     ✓ to_token2 E1 E2.
   Proof.
     intros x. unfold to_token2.
-    by case bool_decide.
+    by case_decide.
   Qed.
 
   Lemma to_token2_lookup k1 k2 E1 E2 :
     k1 ∈ E1 → k2 ∈ E2 →
     to_token2 E1 E2 (k1, k2) = Excl' ().
-  Proof. intros. unfold to_token2. by rewrite bool_decide_eq_true_2. Qed.
+  Proof. intros. unfold to_token2. by rewrite decide_True. Qed.
 
   Lemma to_token2_lookup_None k1 k2 E1 E2 :
     k1 ∉ E1 ∨ k2 ∉ E2 →
     to_token2 E1 E2 (k1, k2) = None.
   Proof.
     intros. unfold to_token2.
-    rewrite bool_decide_eq_false_2; auto. set_solver.
+    rewrite decide_False; auto. set_solver.
   Qed.
 
   Local Ltac yes := (rewrite to_token2_lookup; auto).
   Local Ltac no := (rewrite to_token2_lookup_None; auto).
+
+  Lemma to_token2_op E1A E1B E2A E2B :
+    to_token2 E1A E2A ⋅ to_token2 E1B E2B
+    = λ x, (to_token2 E1A E2A x) ⋅ (to_token2 E1B E2B x).
+  Proof. auto. Qed.
 
   Lemma to_token2_union_1 E1A E1B E2 :
     E1A ## E1B →
@@ -47,8 +52,7 @@ Section token2R_lemmas.
     ≡ to_token2 (E1A ∪ E1B) E2.
   Proof.
     intros DISJ (k1, k2). rewrite discrete_fun_lookup_op.
-    destruct (decide (k1 ∈ E1A)); destruct (decide (k1 ∈ E1B));
-    destruct (decide (k2 ∈ E2)).
+    destruct (decide (k1 ∈ E1A)), (decide (k1 ∈ E1B)), (decide (k2 ∈ E2)).
     - set_solver.
     - set_solver.
     - yes. no. yes. set_solver.
@@ -57,6 +61,19 @@ Section token2R_lemmas.
     - no. no. no.
     - no. no. no. set_solver.
     - no. no. no.
+  Qed.
+
+  Lemma to_token2_union_1_valid E1A E1B E2 :
+    E2 ≠ ∅ → ✓ (to_token2 E1A E2 ⋅ to_token2 E1B E2) → E1A ## E1B.
+  Proof.
+    intros HE2 HE1.
+    rewrite to_token2_op in HE1.
+    destruct (coPset_choose E2) as [y Hy]; auto.
+    set_unfold.
+    intros x. intros.
+    specialize (HE1 (x, y)); simpl in HE1.
+    unfold to_token2 in HE1; simpl in HE1.
+    repeat case_decide; try set_solver.
   Qed.
 
   Lemma to_token2_union_2 E1 E2A E2B :
@@ -65,8 +82,7 @@ Section token2R_lemmas.
     ≡ to_token2 E1 (E2A ∪ E2B).
   Proof.
     intros DISJ (k1, k2). rewrite discrete_fun_lookup_op.
-    destruct (decide (k1 ∈ E1));
-    destruct (decide (k2 ∈ E2A)); destruct (decide (k2 ∈ E2B)).
+    destruct (decide (k1 ∈ E1)), (decide (k2 ∈ E2A)), (decide (k2 ∈ E2B)).
     - set_solver.
     - yes. no. yes. set_solver.
     - no. yes. yes. set_solver.
@@ -77,10 +93,18 @@ Section token2R_lemmas.
     - no. no. no.
   Qed.
 
-  Lemma to_token2_op E1A E1B E2A E2B :
-    to_token2 E1A E2A ⋅ to_token2 E1B E2B
-    = λ x, (to_token2 E1A E2A x) ⋅ (to_token2 E1B E2B x).
-  Proof. auto. Qed.
+  Lemma to_token2_union_2_valid E1 E2A E2B :
+    E1 ≠ ∅ → ✓ (to_token2 E1 E2A ⋅ to_token2 E1 E2B) → E2A ## E2B.
+  Proof.
+    intros HE1 HE2.
+    rewrite to_token2_op in HE2.
+    destruct (coPset_choose E1) as [x Hx]; auto.
+    set_unfold.
+    intros y. intros.
+    specialize (HE2 (x, y)); simpl in HE2.
+    unfold to_token2 in HE2; simpl in HE2.
+    repeat case_decide; try set_solver.
+  Qed.
 
   Lemma to_token2_insert_1 E1 E2 k :
     k ∉ E1 →
@@ -129,15 +153,7 @@ Section lemmas.
   Proof.
     unseal. iIntros (HE) "T1 T2".
     iCombine "T1 T2" gives %H. iPureIntro.
-    rewrite to_token2_op in H.
-    destruct (decide (E1A ∩ E1B = ∅)); first set_solver.
-
-    destruct (coPset_choose (E1A ∩ E1B)) as [x Hx]; auto.
-    destruct (coPset_choose E2) as [y Hy]; auto.
-    specialize (H (x, y)); simpl in H.
-    unfold to_token2 in H; simpl in H.
-    do 2 (rewrite bool_decide_eq_true_2 in H; last set_solver).
-    done.
+    eapply to_token2_union_1_valid; done.
   Qed.
 
   Lemma token2_valid_2 γ E1 E2A E2B :
@@ -147,15 +163,7 @@ Section lemmas.
   Proof.
     unseal. iIntros (HE) "T1 T2".
     iCombine "T1 T2" gives %?. iPureIntro.
-    rewrite to_token2_op in H.
-    destruct (decide (E2A ∩ E2B = ∅)); first set_solver.
-
-    destruct (coPset_choose (E2A ∩ E2B)) as [x Hx]; auto.
-    destruct (coPset_choose E1) as [y Hy]; auto.
-    specialize (H (y, x)); simpl in H.
-    unfold to_token2 in H; simpl in H.
-    do 2 (rewrite bool_decide_eq_true_2 in H; last set_solver).
-    done.
+    eapply to_token2_union_2_valid; done.
   Qed.
 
   Lemma token2_union_1 γ E1A E1B E2 :
@@ -190,21 +198,19 @@ Section lemmas.
     apply disjoint_difference_r1. done.
   Qed.
 
+  Lemma token2_get_empty γ E1 E2 :
+    E1 = ∅ ∨ E2 = ∅ → ⊢ |==> token2 γ E1 E2.
+  Proof.
+    unseal. intros. iMod own_unit as "H". iApply (own_update with "H").
+    apply discrete_fun_update.
+    intros []???; rewrite to_token2_lookup_None; set_solver.
+  Qed.
   Lemma token2_get_empty_1 γ E :
     ⊢ |==> token2 γ ∅ E.
-  Proof.
-    unseal. iMod own_unit as "H". iApply (own_update with "H").
-    apply discrete_fun_update.
-    intros []???; rewrite to_token2_lookup_None; set_solver.
-  Qed.
-
+  Proof. apply token2_get_empty. by left. Qed.
   Lemma token2_get_empty_2 γ E :
     ⊢ |==> token2 γ E ∅.
-  Proof.
-    unseal. iMod own_unit as "H". iApply (own_update with "H").
-    apply discrete_fun_update.
-    intros []???; rewrite to_token2_lookup_None; set_solver.
-  Qed.
+  Proof. apply token2_get_empty. by right. Qed.
 
   Global Instance token2_timeless γ E1 E2 :
     Timeless (token2 γ E1 E2).
@@ -214,12 +220,11 @@ Section lemmas.
     pred_infinite P →
     ⊢ |==> ∃ γ, ⌜P γ⌝ ∗ token2 γ E1 E2.
   Proof.
-    unseal. intros. iApply own_alloc_strong; auto.
-    apply to_token2_valid.
+    unseal. intros. apply own_alloc_strong; auto using to_token2_valid.
   Qed.
   Lemma token2_alloc E1 E2 :
     ⊢ |==> ∃ γ, token2 γ E1 E2.
-  Proof. unseal. iApply own_alloc. apply to_token2_valid. Qed.
+  Proof. unseal. apply own_alloc, to_token2_valid. Qed.
 
   Lemma token2_insert_1 γ E1 E2 k :
     k ∉ E1 →

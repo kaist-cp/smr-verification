@@ -67,7 +67,7 @@ Section type.
     - split; [by destruct 1|by intros [? ?]; constructor].
     - by intros [].
     - repeat apply limit_preserving_and; repeat (apply limit_preserving_forall; intros ?).
-      + apply bi.limit_preserving_entails=> n ty1 ty2 Hty; first done. f_equiv; [apply Hty|by rewrite Hty].
+      apply bi.limit_preserving_entails=> n ty1 ty2 Hty; first done. f_equiv; [apply Hty|by rewrite Hty].
   Qed.
 
   Global Program Instance type_inhabited : Inhabited type := populate {|
@@ -114,7 +114,7 @@ Section type_dist2.
   Lemma type_dist_dist2 n ty1 ty2 : dist n ty1 ty2 → type_dist2 n ty1 ty2.
   Proof. intros EQ. split; intros; try apply dist_dist_later; apply EQ. Qed.
   Lemma type_dist2_dist_later n ty1 ty2 : type_dist2 n ty1 ty2 → dist_later n ty1 ty2.
-  Proof. intros EQ. eapply dist_later_fin_iff. destruct n; first done. split; intros; try apply EQ; lia. Qed.
+  Proof. intros EQ. dist_later_fin_intro. split; intros; try apply EQ; lia. Qed.
   Lemma type_later_dist2_later n ty1 ty2 : dist_later n ty1 ty2 → type_dist2_later n ty1 ty2.
   Proof. destruct n; first done. rewrite dist_later_fin_iff. exact: type_dist_dist2. Qed.
   Lemma type_dist2_dist n ty1 ty2 : type_dist2 (S n) ty1 ty2 → dist n ty1 ty2.

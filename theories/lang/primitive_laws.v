@@ -100,7 +100,7 @@ Section heap_definitions.
     match n with O => ∅ | S n => <[i0 := Excl ()]>(inter (i0+1) n) end.
 
   Definition heap_freeable_def (l : loc) (q : frac) (n: nat) : iProp Σ :=
-    own heap_freeable_name (◯ {[ l.1 := (q, inter (l.2) n) ]}).
+    own heap_freeable_name (◯ {[ l.1 := (q, inter (l.2) n) ]}) ∧ ⌜0 < n⌝.
   Definition heap_freeable_aux : seal (@heap_freeable_def). Proof. by eexists. Qed.
   Definition heap_freeable := unseal heap_freeable_aux.
   Definition heap_freeable_unseal : @heap_freeable = @heap_freeable_def :=
@@ -281,24 +281,24 @@ Section heap.
   Lemma inter_valid i n : ✓ inter i n.
   Proof. revert i. induction n as [|n IH]=>i; first done. by apply insert_valid. Qed.
 
-  Lemma heap_freeable_op_eq l q1 q2 n n' :
-    †{q1}l…n ∗ †{q2}(l +ₗ n) … n' ⊣⊢ †{q1+q2}l…(n+n').
-  Proof.
-    by rewrite heap_freeable_unseal /heap_freeable_def -own_op -auth_frag_op
-      singleton_op -pair_op inter_op.
-  Qed.
-
   Lemma heap_freeable_valid l n n' :
     †l…n -∗ †l…n' -∗ False.
   Proof.
-    iIntros "†l †l'".
+    rewrite heap_freeable_unseal /heap_freeable_def.
+    iIntros "[†l %Hn] [†l' %Hn']".
     iCombine "†l †l'" as "†".
-    rewrite heap_freeable_unseal /heap_freeable_def -own_op -auth_frag_op.
-    rewrite singleton_op -pair_op own_valid.
+    rewrite own_valid.
     iDestruct "†" as "%H". iPureIntro.
     rewrite auth_frag_valid singleton_valid pair_valid in H.
     destruct H as [H _].
-    rewrite frac_op frac_valid in H. done.
+    rewrite frac_valid in H. done.
+  Qed.
+
+  Lemma heap_freeable_nonzero l n :
+    †l…n -∗ ⌜(0 < n)%nat⌝.
+  Proof.
+    rewrite heap_freeable_unseal /heap_freeable_def.
+    by iIntros "[_ %]".
   Qed.
 
   (** Properties about heap_freeable_rel and heap_freeable *)
@@ -449,6 +449,7 @@ Section heap.
     { iExists _. iFrame. iPureIntro.
       auto using heap_freeable_rel_init_mem. }
     rewrite heap_freeable_unseal /heap_freeable_def. iFrame.
+    iPureIntro. lia.
   Qed.
 
   Definition heap_seq (vl : list val) (l: loc) : memory :=
@@ -508,7 +509,8 @@ Section heap.
         heap_ctx (free_mem l (Z.to_nat n) σ).
   Proof.
     iDestruct 1 as (hF) "(Hvalσ & HhF & REL)"; iDestruct "REL" as %REL.
-    iIntros "Hmt Hf". rewrite heap_freeable_unseal /heap_freeable_def.
+    rewrite heap_freeable_unseal /heap_freeable_def.
+    iIntros "Hmt [Hf %Hn]".
     iCombine "HhF Hf" gives % [Hl Hv]%auth_both_valid_discrete.
     move: Hl=> /singleton_included_l [[q qs] [/leibniz_equiv_iff Hl Hq]].
     apply (Some_included_exclusive _ _) in Hq as [=<-<-]%leibniz_equiv; last first.

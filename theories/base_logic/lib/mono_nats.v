@@ -17,10 +17,10 @@ Definition mono_natsR : cmra :=
   positive -d> mono_natUR.
 
 Definition to_mono_nats_auth (E : coPset) (f : Qp) (n : nat) : mono_natsR :=
-  λ k, if bool_decide (k ∈ E) then ●MN{#f} n else ◯MN 0.
+  λ k, if decide (k ∈ E) then ●MN{#f} n else ◯MN 0.
 
 Definition to_mono_nats_lb (E : coPset) (n : nat) : mono_natsR :=
-  λ k, if bool_decide (k ∈ E) then ◯MN n else ◯MN 0.
+  λ k, if decide (k ∈ E) then ◯MN n else ◯MN 0.
 
 Section mono_natsR.
 
@@ -35,19 +35,25 @@ Section mono_natsR.
 
   Lemma to_mono_nats_auth_lookup k E q a :
     k ∈ E → to_mono_nats_auth E q a k = ●MN{#q} a.
-  Proof. intros. unfold to_mono_nats_auth. by rewrite bool_decide_eq_true_2. Qed.
+  Proof. intros. rewrite /to_mono_nats_auth decide_True //. Qed.
 
   Lemma to_mono_nats_auth_lookup_None k E q a :
     k ∉ E → to_mono_nats_auth E q a k = ◯MN 0.
-  Proof. intros. unfold to_mono_nats_auth. by rewrite bool_decide_eq_false_2. Qed.
+  Proof. intros. rewrite /to_mono_nats_auth decide_False //. Qed.
 
   Lemma to_mono_nats_lb_lookup k E a :
     k ∈ E → to_mono_nats_lb E a k = ◯MN a.
-  Proof. intros. unfold to_mono_nats_lb. by rewrite bool_decide_eq_true_2. Qed.
+  Proof. intros. rewrite /to_mono_nats_lb decide_True //. Qed.
 
   Lemma to_mono_nats_lb_lookup_None k E a :
     k ∉ E → to_mono_nats_lb E a k = ◯MN 0.
-  Proof. intros. unfold to_mono_nats_lb. by rewrite bool_decide_eq_false_2. Qed.
+  Proof. intros. rewrite /to_mono_nats_lb decide_False //. Qed.
+
+  Local Ltac yes_auth := (rewrite to_mono_nats_auth_lookup; [|set_solver..]; auto).
+  Local Ltac no_auth := (rewrite to_mono_nats_auth_lookup_None; [|set_solver..]; auto).
+
+  Local Ltac yes_lb := (rewrite to_mono_nats_lb_lookup; [|set_solver..]; auto).
+  Local Ltac no_lb := (rewrite to_mono_nats_lb_lookup_None; [|set_solver..]; auto).
 
   Lemma to_mono_nats_auth_union E1 E2 q a :
     E1 ## E2 →
@@ -55,17 +61,13 @@ Section mono_natsR.
     ≡ to_mono_nats_auth (E1 ∪ E2) q a.
   Proof.
     intros H x. rewrite discrete_fun_lookup_op.
-    destruct (decide (x ∈ E1)).
-    - rewrite to_mono_nats_auth_lookup; auto.
-      rewrite to_mono_nats_auth_lookup_None; last set_solver.
-      rewrite to_mono_nats_auth_lookup; last set_solver.
-      rewrite mono_nat_auth_lb_op -assoc -mono_nat_lb_op Nat.max_0_r //.
-    - rewrite to_mono_nats_auth_lookup_None; auto.
-      destruct (decide (x ∈ E2)).
-      + rewrite to_mono_nats_auth_lookup; auto.
-        rewrite to_mono_nats_auth_lookup; last set_solver. done.
-      + rewrite to_mono_nats_auth_lookup_None; auto.
-        rewrite to_mono_nats_auth_lookup_None; last set_solver. done.
+    destruct (decide (x ∈ E1)), (decide (x ∈ E2)).
+    - set_solver.
+    - yes_auth. no_auth. yes_auth.
+      rewrite mono_nat_auth_lb_op -assoc -mono_nat_lb_op.
+      rewrite Nat.max_0_r //.
+    - no_auth. yes_auth. yes_auth.
+    - no_auth. no_auth. no_auth.
   Qed.
 
   Lemma to_mono_nats_lb_union E1 E2 a :
@@ -74,17 +76,12 @@ Section mono_natsR.
     ≡ to_mono_nats_lb (E1 ∪ E2) a.
   Proof.
     intros H x. rewrite discrete_fun_lookup_op.
-    destruct (decide (x ∈ E1)).
-    - rewrite to_mono_nats_lb_lookup; auto.
-      rewrite to_mono_nats_lb_lookup_None; last set_solver.
-      rewrite to_mono_nats_lb_lookup; last set_solver.
-      rewrite -mono_nat_lb_op Nat.max_0_r //.
-    - rewrite to_mono_nats_lb_lookup_None; auto.
-      destruct (decide (x ∈ E2)).
-      + rewrite to_mono_nats_lb_lookup; auto.
-        rewrite to_mono_nats_lb_lookup; last set_solver. done.
-      + rewrite to_mono_nats_lb_lookup_None; auto.
-        rewrite to_mono_nats_lb_lookup_None; last set_solver. done.
+    destruct (decide (x ∈ E1)), (decide (x ∈ E2)).
+    - set_solver.
+    - yes_lb. no_lb. yes_lb.
+      rewrite -mono_nat_lb_op. rewrite Nat.max_0_r //.
+    - no_lb. yes_lb. yes_lb.
+    - no_lb. no_lb. no_lb.
   Qed.
 
   Lemma to_mono_nats_frac E p q a :
@@ -92,9 +89,8 @@ Section mono_natsR.
   Proof.
     intros x. rewrite discrete_fun_lookup_op.
     destruct (decide (x ∈ E)).
-    - rewrite !to_mono_nats_auth_lookup //.
-      rewrite -mono_nat_auth_dfrac_op //.
-    - by rewrite !to_mono_nats_auth_lookup_None.
+    - repeat yes_auth. rewrite -mono_nat_auth_dfrac_op //.
+    - repeat no_auth.
   Qed.
 
   Lemma to_mono_nats_auth_op E1 E2 a1 q1 a2 q2 :
@@ -116,12 +112,10 @@ Section mono_natsR.
     to_mono_nats_lb E n ≼ to_mono_nats_auth E q n.
   Proof.
     exists (to_mono_nats_auth E q n).
-    rewrite (comm op) to_mono_nats_auth_lb_op.
-    intros k.
+    rewrite (comm op). intros k. rewrite discrete_fun_lookup_op.
     case (decide (k ∈ E)) => Hk.
-    - rewrite to_mono_nats_auth_lookup //. rewrite to_mono_nats_lb_lookup //.
-      rewrite -mono_nat_auth_lb_op //.
-    - rewrite to_mono_nats_auth_lookup_None //. rewrite to_mono_nats_lb_lookup_None //.
+    - yes_auth. yes_lb. rewrite -mono_nat_auth_lb_op //.
+    - no_auth. no_lb.
   Qed.
 
   Lemma mono_nats_lb_included E n1 n2 :
@@ -129,11 +123,21 @@ Section mono_natsR.
     to_mono_nats_lb E n1 ≼ to_mono_nats_lb E n2.
   Proof.
     exists (to_mono_nats_lb E n2).
-    rewrite to_mono_nats_lb_op.
-    intros k.
+    intros k. rewrite discrete_fun_lookup_op.
     case (decide (k ∈ E)) => Hk.
-    - rewrite !to_mono_nats_lb_lookup //. rewrite -mono_nat_lb_op_le_l //.
-    - rewrite !to_mono_nats_lb_lookup_None //.
+    - yes_lb. yes_lb. rewrite -mono_nat_lb_op_le_l //.
+    - no_lb. no_lb.
+  Qed.
+
+  Lemma to_mono_nats_auth_update n' n E :
+    n ≤ n' →
+    to_mono_nats_auth E 1 n ~~> to_mono_nats_auth E 1 n' ⋅ to_mono_nats_lb E n'.
+  Proof.
+    intros. apply discrete_fun_update=>x. rewrite discrete_fun_lookup_op.
+    destruct (decide (x ∈ E)).
+    - repeat yes_auth. yes_lb.
+      rewrite -mono_nat_auth_lb_op. by apply mono_nat_update.
+    - repeat no_auth. no_lb. done.
   Qed.
 End mono_natsR.
 
@@ -191,11 +195,10 @@ Section mono_nats_rules.
   Lemma mono_nats_own_alloc n :
     ⊢ |==> ∃ γ, mono_nats_auth γ ⊤ 1 n ∗ mono_nats_lb γ ⊤ n.
   Proof.
-    unseal. iMod (own_alloc (to_mono_nats_auth ⊤ 1 n ⋅ to_mono_nats_lb ⊤ n)) as (γ) "[??]".
-    { intro. rewrite discrete_fun_lookup_op.
-      unfold to_mono_nats_auth; simpl. unfold to_mono_nats_lb; simpl.
-      by apply mono_nat_both_valid. }
-    auto with iFrame.
+    unseal. setoid_rewrite <-own_op. apply own_alloc.
+    intro. rewrite discrete_fun_lookup_op.
+    rewrite /to_mono_nats_auth /to_mono_nats_lb /=.
+    by apply mono_nat_both_valid.
   Qed.
 
   Lemma mono_nats_auth_valid γ E1 E2 q1 q2 n1 n2 :
@@ -207,8 +210,8 @@ Section mono_nats_rules.
     unseal. iIntros (D) "M1 M2".
     apply coPset_choose in D as [x D].
     iCombine "M1 M2" gives %Q.
-    specialize (Q x). rewrite to_mono_nats_auth_op in Q.
-    repeat rewrite to_mono_nats_auth_lookup in Q; try set_solver.
+    specialize (Q x).
+    rewrite discrete_fun_lookup_op !to_mono_nats_auth_lookup in Q; [|set_solver..].
     rewrite mono_nat_auth_dfrac_op_valid in Q. done.
   Qed.
 
@@ -237,9 +240,10 @@ Section mono_nats_rules.
     unseal. iIntros (D) "A L".
     apply coPset_choose in D as [x D].
     iCombine "A L" gives %Q.
-    specialize (Q x). rewrite to_mono_nats_auth_lb_op in Q.
-    rewrite to_mono_nats_auth_lookup in Q; try set_solver.
-    rewrite to_mono_nats_lb_lookup in Q; try set_solver.
+    specialize (Q x).
+    rewrite discrete_fun_lookup_op
+      ?to_mono_nats_auth_lookup
+      ?to_mono_nats_lb_lookup in Q; [|set_solver..].
     rewrite mono_nat_both_dfrac_valid in Q. by destruct Q.
   Qed.
 
@@ -272,15 +276,8 @@ Section mono_nats_rules.
     n ≤ n' →
     mono_nats_auth γ E 1 n ==∗ mono_nats_auth γ E 1 n' ∗ mono_nats_lb γ E n'.
   Proof.
-    unseal. iIntros (Hn) "A".
-    rewrite -own_op. iMod (own_update with "A"); auto.
-    apply discrete_fun_update=>x. rewrite discrete_fun_lookup_op.
-    destruct (decide (x ∈ E)).
-    - repeat rewrite to_mono_nats_auth_lookup; auto.
-      rewrite to_mono_nats_lb_lookup; auto.
-      rewrite -mono_nat_auth_lb_op. by apply mono_nat_update.
-    - repeat rewrite to_mono_nats_auth_lookup_None; auto.
-      rewrite to_mono_nats_lb_lookup_None; auto. done.
+    unseal. rewrite -own_op. intros Hn.
+    iApply own_update. by apply to_mono_nats_auth_update.
   Qed.
 
   Lemma mono_nats_auth_update_plus {γ E n} m :

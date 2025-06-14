@@ -177,7 +177,7 @@ Proof using All.
   { (* prove AACC of [protect] for empty stack case and commit empty pop *)
     iClear "IH".
     iAaccIntro with "[st.h↦]".
-    1: instantiate (1 := [tele_arg None; inhabitant; 0; node]); iFrame. all: simpl.
+    1: instantiate (1 := [tele_arg None; inhabitant; inhabitant; inhabitant]); iFrame. all: simpl.
     { iIntros "[st.h↦ _] !>". iSplitL "Nodes st.h↦ γs"; eauto with iFrame.
       iExists None, []. by iFrame. }
     iMod "AU" as (xs1') "[TStack [_ Commit]]".

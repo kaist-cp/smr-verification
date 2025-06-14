@@ -82,7 +82,7 @@ Inductive bin_op : Set :=
   | OffsetOp | TagOp. (* Pointer arithmatic *)
 
 Definition oloc_to_lit (lopt : option loc) : base_lit :=
-  LitLoc (Loc.to_tagged_loc lopt 0%Z).
+  LitLoc (lopt &ₜ 0%Z).
 
 Global Instance oloc_to_lit_inj : Inj (=) (=) oloc_to_lit.
 Proof. intros [] []; simpl; naive_solver. Qed.
@@ -582,9 +582,9 @@ Definition bin_op_eval_bool (op : bin_op) (b1 b2 : bool) : option base_lit :=
 Definition bin_op_eval_loc (op : bin_op) (l1 : Loc.tagged_loc) (v2 : base_lit) : option base_lit :=
   match l1, op, v2 with
   | (Loc.TLoc (Some l1) tag), OffsetOp, LitInt (FinInt off) =>
-    Some $ LitLoc $ Loc.to_tagged_loc (Some (l1 +ₗ off)) tag
+    Some $ LitLoc $ Some (l1 +ₗ off) &ₜ tag
   | (Loc.TLoc l1 _), TagOp, LitInt (FinInt tag) =>
-    Some $ LitLoc $ Loc.to_tagged_loc l1 tag
+    Some $ LitLoc $ l1 &ₜ tag
   | _, _, _ => None
   end.
 
@@ -659,27 +659,27 @@ Inductive base_step : expr → state → list observation → expr → state →
      base_step (AllocN (Val $ LitV $ LitInt $ FinInt n) (Val v)) σ
                []
                (* unlike lambda-rust, we expose the fact that the returned loc is the head of the blk *)
-               (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some (l,0%Z)) 0%Z) (state_upd_heap (init_mem (l,0%Z) (Z.to_nat n) v) σ)
+               (Val $ LitV $ LitLoc $ Some (l,0%Z) &ₜ 0) (state_upd_heap (init_mem (l,0%Z) (Z.to_nat n) v) σ)
                []
   | FreeS n l σ :
      (0 < n)%Z →
      (∀ m, is_Some (σ.(heap) !! (l +ₗ m)) ↔ 0 ≤ m < n)%Z →
-     base_step (Free (Val $ LitV $ LitInt $ FinInt n) (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some l) 0%Z)) σ
+     base_step (Free (Val $ LitV $ LitInt $ FinInt n) (Val $ LitV $ LitLoc $ Some l &ₜ 0)) σ
                []
                (Val $ LitV LitUnit) (state_upd_heap (free_mem l (Z.to_nat n)) σ)
                []
   | LoadS l v σ :
      σ.(heap) !! l = Some v →
-     base_step (Load (Val $ LitV $ LitLoc $ ((Some l) &ₜ 0%Z))) σ [] (of_val v) σ []
+     base_step (Load (Val $ LitV $ LitLoc $ Some l &ₜ 0)) σ [] (of_val v) σ []
   | StoreS l v w σ :
      σ.(heap) !! l = Some v →
-     base_step (Store (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some l) 0%Z) (Val w)) σ
+     base_step (Store (Val $ LitV $ LitLoc $ Some l &ₜ 0) (Val w)) σ
                []
                (Val $ LitV LitUnit) (state_upd_heap <[l:=w]> σ)
                []
   | XchgS l v1 v2 σ :
      σ.(heap) !! l = Some v1 →
-     base_step (Xchg (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some l) 0%Z) (Val v2)) σ
+     base_step (Xchg (Val $ LitV $ LitLoc $ Some l &ₜ 0) (Val v2)) σ
                []
                (Val v1) (state_upd_heap <[l:=v2]> σ)
                []
@@ -689,13 +689,13 @@ Inductive base_step : expr → state → list observation → expr → state →
      (* Crucially, this compares the same way as [EqOp]! *)
      vals_compare_safe vl v1 →
      b = bool_decide (vl = v1) →
-     base_step (CmpXchg (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some l) 0%Z) (Val v1) (Val v2)) σ
+     base_step (CmpXchg (Val $ LitV $ LitLoc $ Some l &ₜ 0) (Val v1) (Val v2)) σ
                []
                (Val $ PairV vl (LitV $ LitBool b)) (if b then state_upd_heap <[l:=v2]> σ else σ)
                []
   | FaaS l i1 i2 σ :
      σ.(heap) !! l = Some (LitV (LitInt (FinInt i1))) →
-     base_step (FAA (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some l) 0%Z) (Val $ LitV $ LitInt $ FinInt i2)) σ
+     base_step (FAA (Val $ LitV $ LitLoc $ Some l &ₜ 0) (Val $ LitV $ LitInt $ FinInt i2)) σ
                []
                (Val $ LitV $ LitInt $ FinInt i1) (state_upd_heap <[l:=LitV (LitInt (FinInt (i1 + i2)))]>σ)
                []
@@ -774,7 +774,7 @@ Lemma alloc_fresh v n σ :
   let init := replicate (Z.to_nat n) (LitV $ LitInt $ FinInt 0) in
   (0 < n)%Z →
   base_step (AllocN ((Val $ LitV $ LitInt $ FinInt n)) (Val v)) σ []
-            (Val $ LitV $ LitLoc $ Loc.to_tagged_loc (Some l) 0%Z) (state_upd_heap (init_mem l (Z.to_nat n) v) σ) [].
+            (Val $ LitV $ LitLoc $ Some l &ₜ 0) (state_upd_heap (init_mem l (Z.to_nat n) v) σ) [].
 Proof.
   intros l init Hn. apply AllocNS; first done.
   - intros i. apply (is_fresh_blk _ i).
